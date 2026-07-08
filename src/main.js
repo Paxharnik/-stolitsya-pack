@@ -50,6 +50,7 @@ const state = {
 const money = (value) => `${Number(value || 0).toFixed(2)} грн`;
 const byId = (items, id) => items.find((item) => Number(item.id) === Number(id));
 const esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+const canonicalUrl = (path = location.pathname) => `${location.origin}${path}`;
 const icon = (name) => {
   const icons = {
     menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -64,9 +65,45 @@ const icon = (name) => {
     phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4l4 4-2 2c2 4 4 6 8 8l2-2 4 4-2 2C10 21 3 14 2 6z"/></svg>',
     arrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    percent: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
+    shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7z"/></svg>',
+    message: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3"/><path d="M17 7h.01"/></svg>',
+    video: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 8v8l6-4z"/><rect x="3" y="5" width="18" height="14" rx="3"/></svg>',
   };
   return `<span class="ui-icon">${icons[name] || icons.box}</span>`;
 };
+
+function organizationJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Столиця Пак",
+    url: location.origin,
+    logo: `${location.origin}/uploads/brand/logo.png`,
+    telephone: ["+380501308187", "+380731308187"],
+    email: "solodovnik.ak@gmail.com",
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Київ",
+      streetAddress: "вул. Тепловозна 18",
+      addressCountry: "UA",
+    },
+  };
+}
+
+function breadcrumbsJsonLd(items) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: item.url,
+    })),
+  };
+}
 
 function saveCart() {
   localStorage.setItem("stolitsya-pack-cart", JSON.stringify(state.cart));
@@ -79,17 +116,17 @@ function setSeo({ title, description, url, image, product }) {
   setMeta("og:description", description, "property");
   setMeta("og:url", url || location.href, "property");
   if (image) setMeta("og:image", image, "property");
+  let canonical = document.head.querySelector('link[rel="canonical"]');
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.setAttribute("rel", "canonical");
+    document.head.appendChild(canonical);
+  }
+  canonical.setAttribute("href", url || location.href);
   const ld = document.querySelector("#dynamic-jsonld") || document.createElement("script");
   ld.id = "dynamic-jsonld";
   ld.type = "application/ld+json";
-  ld.textContent = JSON.stringify(product || {
-    "@context": "https://schema.org",
-    "@type": "Store",
-    name: "Столиця Пак",
-    url: location.origin,
-    telephone: "+380501308187",
-    address: { "@type": "PostalAddress", addressLocality: "Київ", addressCountry: "UA" },
-  });
+  ld.textContent = JSON.stringify(product || organizationJsonLd());
   document.head.appendChild(ld);
 }
 
@@ -143,10 +180,10 @@ function removeFromCart(productId) {
 }
 
 function filteredProducts() {
-  const q = state.filters.q.toLowerCase().trim();
+  const q = state.filters.q.toLocaleLowerCase("uk-UA").trim();
   let items = state.products.filter((product) => {
     const byCategory = !state.filters.category || product.category_slug === state.filters.category;
-    const bySearch = !q || `${product.name} ${product.description} ${product.sku} ${product.category_name}`.toLowerCase().includes(q);
+    const bySearch = !q || `${product.name} ${product.description} ${product.sku} ${product.category_name}`.toLocaleLowerCase("uk-UA").includes(q);
     const byStock = !state.filters.inStock || product.stock_quantity > 0;
     return product.active && byCategory && bySearch && byStock;
   });
@@ -164,6 +201,7 @@ async function loadPublicData() {
 
 function layout(content) {
   const count = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+  const footerCategories = state.categories.slice(0, 9);
   return `
     <header class="topbar">
       <a class="brand" href="/" data-link><span class="brand-mark"><img src="/uploads/brand/logo.png" alt="Столиця Пак" /></span><strong>Столиця Пак</strong><small>упаковка для бізнесу</small></a>
@@ -177,19 +215,36 @@ function layout(content) {
       <button class="cart-button" data-open-cart>${icon("cart")}Кошик <span data-cart-count>${count}</span></button>
     </header>
     ${content}
-    <footer>
-      <div>
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img src="/uploads/brand/logo.png" alt="Столиця Пак" loading="lazy" />
         <strong>Столиця Пак</strong>
-        <span>Пакувальні матеріали оптом і вроздріб</span>
-        <p>Київ, вул. Тепловозна 18</p>
-        <p>Пн-Сб: 08:00-18:00</p>
+        <span>Пакети від виробника: опт і роздріб по Україні</span>
+        <p>© ${new Date().getFullYear()} Столиця Пак. Всі права захищені.</p>
       </div>
-      <div>
+      <div class="footer-column">
+        <h3>Контакти</h3>
         <a href="tel:+380501308187">+38 (050) 130-81-87</a>
         <a href="tel:+380731308187">+38 (073) 130-81-87</a>
         <a href="mailto:solodovnik.ak@gmail.com">solodovnik.ak@gmail.com</a>
+        <p>Київ, вул. Тепловозна 18</p>
+        <p>Пн-Сб: 08:00-18:00</p>
+      </div>
+      <div class="footer-column">
+        <h3>Категорії</h3>
+        ${footerCategories.map((category) => `<a href="/category/${category.slug}" data-link>${esc(category.name)}</a>`).join("")}
+      </div>
+      <div class="footer-column">
+        <h3>Доставка і оплата</h3>
+        <a href="/#delivery" data-link>Доставка по Україні</a>
+        <a href="/#payment" data-link>Оплата після підтвердження</a>
         <a href="/feeds/google.xml" target="_blank">Google Merchant feed</a>
         <a href="/feeds/products.xml" target="_blank">XML feed</a>
+        <div class="socials" aria-label="Соціальні мережі">
+          <a href="tel:+380501308187" aria-label="Telegram">${icon("message")}Telegram</a>
+          <a href="mailto:solodovnik.ak@gmail.com" aria-label="Instagram">${icon("instagram")}Instagram</a>
+          <a href="mailto:solodovnik.ak@gmail.com" aria-label="TikTok">${icon("video")}TikTok</a>
+        </div>
       </div>
     </footer>
     <aside class="cart-drawer" data-cart-drawer><div class="cart-panel" data-cart-panel></div></aside>
@@ -217,26 +272,42 @@ function renderAdminLogin(error = "") {
 function renderHome() {
   const banner = state.banners[0] || {};
   setSeo({
-    title: "Столиця Пак - пакувальні матеріали та поліетиленові пакети в Україні",
-    description: "Інтернет-магазин пакувальних матеріалів: пакети майка, фасувальні пакети, пакети з логотипом, одноразовий посуд та господарські товари.",
-    url: location.origin + "/",
+    title: "Столиця Пак - пакети від виробника оптом і в роздріб по Україні",
+    description: "Пакети від виробника для магазинів, кафе та бізнесу. Опт і роздріб, актуальні залишки, швидке оформлення замовлення та доставка по Україні.",
+    url: canonicalUrl("/"),
     image: banner.image_url,
+    product: {
+      "@context": "https://schema.org",
+      "@graph": [
+        organizationJsonLd(),
+        {
+          "@type": "WebSite",
+          name: "Столиця Пак",
+          url: location.origin,
+          potentialAction: {
+            "@type": "SearchAction",
+            target: `${location.origin}/?q={search_term_string}`,
+            "query-input": "required name=search_term_string",
+          },
+        },
+      ],
+    },
   });
   return layout(`
     <main>
       <section class="hero" style="--hero-image:url('${esc(banner.image_url || "")}')">
         <div class="hero-copy">
           <span class="eyebrow">Столиця Пак</span>
-          <h1>${esc(banner.title || "Пакеты от производителя")}</h1>
-          <p>${esc(banner.subtitle || "Опт и розница. Доставка по всей Украине.")}</p>
+          <h1>Пакеты от производителя — опт и розница по Украине</h1>
+          <p>Поліетиленові пакети, фасувальна упаковка, пакети з логотипом, одноразовий посуд і господарські товари для магазинів, кафе та виробництв.</p>
           <div class="hero-badges">
-            <span>${icon("box")}Пакеты от производителя</span>
-            <span>${icon("catalog")}Опт и розница</span>
-            <span>${icon("truck")}Доставка по всей Украине</span>
+            <span>${icon("box")}Власний каталог із наявністю</span>
+            <span>${icon("percent")}Оптові ціни для бізнесу</span>
+            <span>${icon("truck")}Відправка по всій Україні</span>
           </div>
           <div class="hero-actions">
-            <a class="primary" href="${esc(banner.link_url || "#catalog")}" data-link>${icon("catalog")}${esc(banner.button_text || "Перейти в каталог")}</a>
-            <a class="secondary" href="tel:+380501308187">${icon("phone")}+38 (050) 130-81-87</a>
+            <a class="primary" href="#catalog" data-link>${icon("catalog")}Перейти в каталог</a>
+            <a class="secondary" href="tel:+380501308187">${icon("phone")}Связаться</a>
           </div>
         </div>
         <div class="hero-panel">
@@ -245,6 +316,7 @@ function renderHome() {
           <div>${icon("truck")}<strong>1-2 дні</strong><span>обробка замовлення</span></div>
         </div>
       </section>
+      ${renderBenefitsSection()}
       ${renderCategorySection()}
       ${renderCatalogSection()}
       ${renderInfoSections()}
@@ -259,15 +331,28 @@ function renderCategoryPage(slug) {
   setSeo({
     title: `${category.name} - купити в Україні | Столиця Пак`,
     description: category.description || `Категорія ${category.name} в інтернет-магазині Столиця Пак.`,
-    url: location.href,
+    url: canonicalUrl(`/category/${category.slug}`),
     image: category.image_url,
+    product: {
+      "@context": "https://schema.org",
+      "@graph": [
+        organizationJsonLd(),
+        breadcrumbsJsonLd([
+          { name: "Головна", url: canonicalUrl("/") },
+          { name: category.name, url: canonicalUrl(`/category/${category.slug}`) },
+        ]),
+      ],
+    },
   });
   return layout(`
     <main>
-      <section class="page-head">
-        <span class="eyebrow">Категорія</span>
-        <h1>${esc(category.name)}</h1>
-        <p>${esc(category.description || "")}</p>
+      <section class="page-head category-head">
+        <div>
+          <span class="eyebrow">Категорія</span>
+          <h1>${esc(category.name)}</h1>
+          <p>${esc(category.description || "")}</p>
+        </div>
+        <img src="${esc(category.image_url)}" alt="${esc(category.name)}" loading="lazy" />
       </section>
       ${renderCatalogSection()}
     </main>
@@ -280,39 +365,77 @@ function renderProductPage(slug) {
   setSeo({
     title: product.seo_title || `${product.name} - Столиця Пак`,
     description: product.seo_description || product.description,
-    url: location.href,
+    url: canonicalUrl(`/product/${product.slug}`),
     image: product.image_url,
     product: {
       "@context": "https://schema.org",
-      "@type": "Product",
-      name: product.name,
-      sku: product.sku,
-      image: product.image_url,
-      description: product.description,
-      offers: {
-        "@type": "Offer",
-        priceCurrency: "UAH",
-        price: product.retail_price,
-        availability: product.stock_quantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-      },
+      "@graph": [
+        organizationJsonLd(),
+        breadcrumbsJsonLd([
+          { name: "Головна", url: canonicalUrl("/") },
+          { name: product.category_name, url: canonicalUrl(`/category/${product.category_slug}`) },
+          { name: product.name, url: canonicalUrl(`/product/${product.slug}`) },
+        ]),
+        {
+          "@type": "Product",
+          name: product.name,
+          sku: product.sku,
+          image: product.image_url,
+          description: product.description,
+          brand: { "@type": "Brand", name: "Столиця Пак" },
+          offers: {
+            "@type": "Offer",
+            priceCurrency: "UAH",
+            price: product.retail_price,
+            availability: product.stock_quantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            url: canonicalUrl(`/product/${product.slug}`),
+          },
+        },
+      ],
     },
   });
+  const related = state.products
+    .filter((item) => item.active && item.category_slug === product.category_slug && item.id !== product.id)
+    .slice(0, 4);
   return layout(`
     <main>
       <section class="product-page">
-        <div class="product-media"><img src="${esc(product.image_url)}" alt="${esc(product.name)}" /></div>
+        <div class="product-media"><img src="${esc(product.image_url)}" alt="${esc(product.name)}" loading="lazy" /></div>
         <div class="product-detail">
           <a class="breadcrumb" href="/category/${product.category_slug}" data-link>${esc(product.category_name)}</a>
           <h1>${esc(product.name)}</h1>
-          <p>${esc(product.description || "")}</p>
+          <p class="lead">${esc(product.description || "Якісна упаковка для щоденної роботи бізнесу та роздрібних покупців.")}</p>
           <div class="price-box">
             <strong>${money(product.retail_price)}</strong>
             <span>Опт: ${money(product.wholesale_price)}</span>
             <span>Залишок: ${product.stock_quantity} шт</span>
           </div>
-          <button class="add-btn wide" data-add="${product.id}" ${product.stock_quantity <= 0 ? "disabled" : ""}>Додати до кошика</button>
+          <button class="add-btn wide" data-add="${product.id}" ${product.stock_quantity <= 0 ? "disabled" : ""}>${icon("cart")}Додати до кошика</button>
+          <div class="commerce-notes">
+            <article>${icon("truck")}<strong>Доставка</strong><span>Відправляємо по Україні після підтвердження менеджером.</span></article>
+            <article>${icon("card")}<strong>Оплата</strong><span>Оплата узгоджується телефоном після оформлення замовлення.</span></article>
+            <article>${icon("percent")}<strong>Опт</strong><span>Для оптових покупців діє окрема ціна: ${money(product.wholesale_price)}.</span></article>
+          </div>
+          <div class="specs">
+            <h2>Характеристики</h2>
+            <dl>
+              <div><dt>SKU</dt><dd>${esc(product.sku || "-")}</dd></div>
+              <div><dt>Категорія</dt><dd>${esc(product.category_name)}</dd></div>
+              <div><dt>Роздрібна ціна</dt><dd>${money(product.retail_price)}</dd></div>
+              <div><dt>Оптова ціна</dt><dd>${money(product.wholesale_price)}</dd></div>
+              <div><dt>Наявність</dt><dd>${product.stock_quantity > 0 ? `${product.stock_quantity} шт` : "Немає в наявності"}</dd></div>
+            </dl>
+          </div>
         </div>
       </section>
+      ${related.length ? `
+        <section class="section related-products">
+          <div class="section-title">
+            <div><span class="eyebrow">Схожі товари</span><h2>Ще з цієї категорії</h2></div>
+          </div>
+          <div class="product-grid">${related.map(renderProductCard).join("")}</div>
+        </section>
+      ` : ""}
     </main>
   `);
 }
@@ -326,16 +449,27 @@ function renderCategorySection() {
   return `
     <section class="section categories">
       <div class="section-title">
-        <div><span class="eyebrow">Каталог</span><h2>Категорії товарів</h2></div>
+        <div><span class="eyebrow">Каталог</span><h2>Популярні категорії упаковки</h2><p>Швидко оберіть потрібний напрям: пакети майка, фасування, рулони, посуд або господарські товари.</p></div>
       </div>
       <div class="category-grid">
         ${state.categories.map((category) => `
           <a class="category-card" href="/category/${category.slug}" data-link>
             <img src="${esc(category.image_url)}" alt="${esc(category.name)}" loading="lazy" />
-            <span>${icon("box")}${esc(category.name)}</span>
+            <span>${icon("box")}<strong>${esc(category.name)}</strong><small>${esc(category.description || "Товари в наявності для опту та роздробу.")}</small></span>
           </a>
         `).join("")}
       </div>
+    </section>
+  `;
+}
+
+function renderBenefitsSection() {
+  return `
+    <section class="benefits" aria-label="Переваги">
+      <article>${icon("shield")}<strong>Надійна упаковка</strong><span>Підбираємо товари для магазинів, складів, кафе та виробництв.</span></article>
+      <article>${icon("percent")}<strong>Опт і роздріб</strong><span>У картці товару одразу видно роздрібну та оптову ціну.</span></article>
+      <article>${icon("truck")}<strong>Доставка по Україні</strong><span>Замовлення зберігається в системі, менеджер швидко уточнює деталі.</span></article>
+      <article>${icon("check")}<strong>120 товарів</strong><span>Актуальний каталог з категоріями, цінами, залишками та фото.</span></article>
     </section>
   `;
 }

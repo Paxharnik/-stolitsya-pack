@@ -566,22 +566,59 @@ def sitemap():
     return "\n".join(rows)
 
 
+def organization_jsonld():
+    return {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Столиця Пак",
+        "url": BASE_URL,
+        "logo": BASE_URL + "/uploads/brand/logo.png",
+        "description": "Інтернет-магазин пакувальних матеріалів та поліетиленових пакетів в Україні.",
+        "telephone": ["+380501308187", "+380731308187"],
+        "email": "solodovnik.ak@gmail.com",
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Київ",
+            "streetAddress": "вул. Тепловозна 18",
+            "addressCountry": "UA",
+        },
+    }
+
+
+def breadcrumbs_jsonld(items):
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": index + 1, "name": item["name"], "item": item["url"]}
+            for index, item in enumerate(items)
+        ],
+    }
+
+
 def page_meta(path):
     meta = {
-        "title": "Столиця Пак - пакувальні матеріали та поліетиленові пакети в Україні",
-        "description": "Інтернет-магазин пакувальних матеріалів: поліетиленові пакети, фасувальні пакети, пакети з логотипом, одноразовий посуд та господарські товари з доставкою по Україні.",
+        "title": "Столиця Пак - пакети від виробника оптом і в роздріб по Україні",
+        "description": "Пакети від виробника для магазинів, кафе та бізнесу. Опт і роздріб, актуальні залишки, швидке оформлення замовлення та доставка по Україні.",
         "url": BASE_URL + path,
         "robots": "index, follow",
         "og_type": "website",
-        "image": "https://w4p-merch.s3.eu-central-1.amazonaws.com/merchant/shop/images/prod_e3b5b2920bf7f3b7d731d3cfc6e17f7a/7e7fe982ef0ca27329a41c7cfe4ff027.jpg",
+        "image": BASE_URL + "/uploads/brand/hero-packing.webp",
         "jsonld": {
             "@context": "https://schema.org",
-            "@type": "Store",
-            "name": "Столиця Пак",
-            "url": BASE_URL,
-            "description": "Інтернет-магазин пакувальних матеріалів та поліетиленових пакетів в Україні.",
-            "telephone": ["+380501308187", "+380731308187"],
-            "address": {"@type": "PostalAddress", "addressLocality": "Київ", "addressCountry": "UA"},
+            "@graph": [
+                organization_jsonld(),
+                {
+                    "@type": "WebSite",
+                    "name": "Столиця Пак",
+                    "url": BASE_URL,
+                    "potentialAction": {
+                        "@type": "SearchAction",
+                        "target": BASE_URL + "/?q={search_term_string}",
+                        "query-input": "required name=search_term_string",
+                    },
+                },
+            ],
         },
     }
     with db() as conn:
@@ -599,18 +636,29 @@ def page_meta(path):
                     "title": f"{row['name']} - купити в Україні | Столиця Пак",
                     "description": row["description"] or f"Категорія {row['name']} в інтернет-магазині Столиця Пак.",
                     "image": row["image_url"] or meta["image"],
+                    "jsonld": {
+                        "@context": "https://schema.org",
+                        "@graph": [
+                            organization_jsonld(),
+                            breadcrumbs_jsonld([
+                                {"name": "Головна", "url": BASE_URL + "/"},
+                                {"name": row["name"], "url": BASE_URL + "/category/" + row["slug"]},
+                            ]),
+                        ],
+                    },
                 })
         if path.startswith("/product/"):
             slug = path.rsplit("/", 1)[1]
             row = conn.execute(
                 """
-                SELECT p.*, c.name AS category_name
+                SELECT p.*, c.name AS category_name, c.slug AS category_slug
                 FROM products p JOIN categories c ON c.id = p.category_id
                 WHERE p.active = 1 AND c.active = 1 AND p.slug = ?
                 """,
                 (slug,),
             ).fetchone()
             if row:
+                product_url = BASE_URL + "/product/" + row["slug"]
                 meta.update({
                     "title": row["seo_title"] or f"{row['name']} - Столиця Пак",
                     "description": row["seo_description"] or row["description"] or row["name"],
@@ -618,17 +666,29 @@ def page_meta(path):
                     "og_type": "product",
                     "jsonld": {
                         "@context": "https://schema.org",
-                        "@type": "Product",
-                        "name": row["name"],
-                        "sku": row["sku"],
-                        "image": row["image_url"],
-                        "description": row["description"] or row["name"],
-                        "offers": {
-                            "@type": "Offer",
-                            "priceCurrency": "UAH",
-                            "price": row["retail_price"],
-                            "availability": "https://schema.org/InStock" if row["stock_quantity"] > 0 else "https://schema.org/OutOfStock",
-                        },
+                        "@graph": [
+                            organization_jsonld(),
+                            breadcrumbs_jsonld([
+                                {"name": "Головна", "url": BASE_URL + "/"},
+                                {"name": row["category_name"], "url": BASE_URL + "/category/" + row["category_slug"]},
+                                {"name": row["name"], "url": product_url},
+                            ]),
+                            {
+                                "@type": "Product",
+                                "name": row["name"],
+                                "sku": row["sku"],
+                                "image": row["image_url"],
+                                "description": row["description"] or row["name"],
+                                "brand": {"@type": "Brand", "name": "Столиця Пак"},
+                                "offers": {
+                                    "@type": "Offer",
+                                    "priceCurrency": "UAH",
+                                    "price": row["retail_price"],
+                                    "availability": "https://schema.org/InStock" if row["stock_quantity"] > 0 else "https://schema.org/OutOfStock",
+                                    "url": product_url,
+                                },
+                            },
+                        ],
                     },
                 })
     return meta
