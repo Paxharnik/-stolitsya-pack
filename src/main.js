@@ -47,6 +47,7 @@ const state = {
   adminAuthenticated: false,
 };
 
+const HOME_PRODUCT_LIMIT = 12;
 const money = (value) => `${Number(value || 0).toFixed(2)} грн`;
 const byId = (items, id) => items.find((item) => Number(item.id) === Number(id));
 const esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
@@ -127,6 +128,7 @@ function setSeo({ title, description, url, image, product }) {
     document.head.appendChild(canonical);
   }
   canonical.setAttribute("href", url || location.href);
+  document.head.querySelectorAll('script[type="application/ld+json"]:not(#dynamic-jsonld)').forEach((tag) => tag.remove());
   const ld = document.querySelector("#dynamic-jsonld") || document.createElement("script");
   ld.id = "dynamic-jsonld";
   ld.type = "application/ld+json";
@@ -183,6 +185,37 @@ function removeFromCart(productId) {
   renderCart();
 }
 
+function phoneDigits(value = "") {
+  return String(value).replace(/\D/g, "");
+}
+
+function formatPhone(value = "") {
+  let digits = phoneDigits(value);
+  if (digits.startsWith("380")) digits = digits.slice(2);
+  else if (digits.startsWith("38")) digits = digits.slice(2);
+  else if (digits.startsWith("80")) digits = digits.slice(1);
+  digits = digits.slice(0, 10);
+  const parts = ["+38"];
+  if (digits.length) parts.push(` (${digits.slice(0, 3)}`);
+  if (digits.length >= 3) parts[1] += ")";
+  if (digits.length > 3) parts.push(` ${digits.slice(3, 6)}`);
+  if (digits.length > 6) parts.push(`-${digits.slice(6, 8)}`);
+  if (digits.length > 8) parts.push(`-${digits.slice(8, 10)}`);
+  return parts.join("");
+}
+
+function validateCheckout(form) {
+  const lines = cartLines();
+  const data = formData(form);
+  const errors = [];
+  if (!lines.length) errors.push("Кошик порожній. Додайте товар перед оформленням.");
+  if (!String(data.name || "").trim()) errors.push("Вкажіть ім'я.");
+  if (phoneDigits(data.phone).length < 12) errors.push("Вкажіть телефон у форматі +38 (0XX) XXX-XX-XX.");
+  if (!String(data.city || "").trim()) errors.push("Вкажіть місто.");
+  if (!String(data.nova_poshta_branch || "").trim()) errors.push("Вкажіть відділення Нової Пошти.");
+  return errors;
+}
+
 function filteredProducts() {
   const q = state.filters.q.toLocaleLowerCase("uk-UA").trim();
   let items = state.products.filter((product) => {
@@ -194,6 +227,15 @@ function filteredProducts() {
   if (state.filters.sort === "price-asc") items = [...items].sort((a, b) => a.retail_price - b.retail_price);
   if (state.filters.sort === "price-desc") items = [...items].sort((a, b) => b.retail_price - a.retail_price);
   return items;
+}
+
+function featuredProducts() {
+  const active = state.products.filter((product) => product.active);
+  const featuredInStock = active.filter((product) => product.featured && product.stock_quantity > 0);
+  const inStock = active.filter((product) => !product.featured && product.stock_quantity > 0);
+  const featuredUnavailable = active.filter((product) => product.featured && product.stock_quantity <= 0);
+  const unavailable = active.filter((product) => !product.featured && product.stock_quantity <= 0);
+  return [...featuredInStock, ...inStock, ...featuredUnavailable, ...unavailable].slice(0, HOME_PRODUCT_LIMIT);
 }
 
 async function loadPublicData() {
@@ -310,7 +352,7 @@ function renderHome() {
             <span>${icon("truck")}Відправка по всій Україні</span>
           </div>
           <div class="hero-actions">
-            <a class="primary" href="#catalog" data-link>${icon("catalog")}Перейти в каталог</a>
+            <a class="primary" href="#categories" data-link>${icon("catalog")}Перейти в каталог</a>
             <a class="secondary" href="tel:+380501308187">${icon("phone")}Связаться</a>
           </div>
         </div>
@@ -322,7 +364,7 @@ function renderHome() {
       </section>
       ${renderBenefitsSection()}
       ${renderCategorySection()}
-      ${renderCatalogSection()}
+      ${renderFeaturedSection()}
       ${renderInfoSections()}
     </main>
   `);
@@ -415,11 +457,14 @@ function renderProductPage(slug) {
             <span>Залишок: ${product.stock_quantity} шт</span>
           </div>
           <button class="add-btn wide" data-add="${product.id}" ${product.stock_quantity <= 0 ? "disabled" : ""}>${icon("cart")}Додати до кошика</button>
-          <div class="commerce-notes">
+          <section class="product-service-block" aria-labelledby="product-service-title">
+            <h2 id="product-service-title">Доставка / Оплата / Опт</h2>
+            <div class="commerce-notes">
             <article>${icon("truck")}<strong>Доставка</strong><span>Відправляємо по Україні після підтвердження менеджером.</span></article>
             <article>${icon("card")}<strong>Оплата</strong><span>Оплата узгоджується телефоном після оформлення замовлення.</span></article>
             <article>${icon("percent")}<strong>Опт</strong><span>Для оптових покупців діє окрема ціна: ${money(product.wholesale_price)}.</span></article>
-          </div>
+            </div>
+          </section>
           <div class="specs">
             <h2>Характеристики</h2>
             <dl>
@@ -451,7 +496,7 @@ function renderNotFound() {
 
 function renderCategorySection() {
   return `
-    <section class="section categories">
+    <section class="section categories" id="categories">
       <div class="section-title">
         <div><span class="eyebrow">Каталог</span><h2>Популярні категорії упаковки</h2><p>Швидко оберіть потрібний напрям: пакети майка, фасування, рулони, посуд або господарські товари.</p></div>
       </div>
@@ -470,6 +515,25 @@ function renderCategorySection() {
       <div class="category-seo">
         <h2>Упаковка для магазинів, кафе та виробництв</h2>
         <p>У каталозі зібрані основні категорії пакувальних матеріалів Столиця Пак: пакети майка, фасувальні пакети, пакети в рулонах, пакети з логотипом, господарські товари, одноразовий посуд, рукавички та сміттєві пакети. Обирайте категорію, переглядайте ціни й залишки та оформлюйте замовлення через кошик.</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderFeaturedSection() {
+  const items = featuredProducts();
+  return `
+    <section class="section catalog featured-catalog" id="catalog">
+      <div class="section-title with-tools">
+        <div>
+          <span class="eyebrow">Популярне</span>
+          <h2>Популярні товари</h2>
+          <p>Показуємо 12 позицій для швидкого замовлення. Повний каталог доступний у категоріях.</p>
+        </div>
+        <a class="primary section-action" href="#categories" data-link>${icon("catalog")}Перейти в каталог</a>
+      </div>
+      <div class="product-grid">
+        ${items.map(renderProductCard).join("")}
       </div>
     </section>
   `;
@@ -573,9 +637,11 @@ function renderCart() {
           </div>
         `).join("")}
       </div>
-      <form class="checkout" data-checkout>
+      <form class="checkout" data-checkout novalidate>
+        <div class="checkout-total"><span>До сплати</span><strong>${money(total)}</strong></div>
+        <div class="form-error" data-checkout-error hidden></div>
         <label>Ім'я<input required name="name" placeholder="Ваше ім'я" /></label>
-        <label>Телефон<input required name="phone" placeholder="+38..." /></label>
+        <label>Телефон<input required name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+38 (0__) ___-__-__" /></label>
         <label>Місто<input required name="city" placeholder="Київ" /></label>
         <label>Відділення Нової Пошти<input required name="nova_poshta_branch" placeholder="Відділення №..." /></label>
         <label>Коментар<textarea name="comment" placeholder="Побажання до замовлення"></textarea></label>
@@ -754,16 +820,27 @@ async function refreshAdmin(tab = "products") {
   content.innerHTML = tab === "categories" ? renderAdminCategories() : tab === "banners" ? renderAdminBanners() : tab === "orders" ? renderAdminOrders() : tab === "import" ? renderAdminImport() : renderAdminProducts();
 }
 
-function flash(message) {
+function flash(message, duration = 1800) {
   const node = document.querySelector("[data-toast]");
   if (!node) return;
   node.textContent = message;
   node.classList.add("show");
-  setTimeout(() => node.classList.remove("show"), 1800);
+  setTimeout(() => node.classList.remove("show"), duration);
 }
 
 async function submitOrder(form) {
+  const errorNode = form.querySelector("[data-checkout-error]");
+  const errors = validateCheckout(form);
+  if (errors.length) {
+    if (errorNode) {
+      errorNode.hidden = false;
+      errorNode.innerHTML = errors.map((error) => `<div>${esc(error)}</div>`).join("");
+    }
+    flash(errors[0]);
+    return;
+  }
   const data = formData(form);
+  data.phone = formatPhone(data.phone);
   const payload = {
     ...data,
     items: state.cart.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
@@ -774,7 +851,7 @@ async function submitOrder(form) {
   document.querySelector("[data-cart-drawer]").classList.remove("open");
   await loadPublicData();
   renderRoute();
-  flash(`Замовлення #${order.id} збережено`);
+  flash(`Спасибо, заказ принят. Номер заказа #${order.id}`, 5200);
 }
 
 async function renderRoute() {
@@ -841,6 +918,9 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  if (event.target.matches('[name="phone"]')) {
+    event.target.value = formatPhone(event.target.value);
+  }
   if (event.target.matches("[data-filter]")) {
     const key = event.target.dataset.filter;
     state.filters[key] = event.target.type === "checkbox" ? event.target.checked : event.target.value;

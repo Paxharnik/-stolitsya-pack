@@ -497,14 +497,29 @@ def import_products(path):
     return {"rows_total": len(rows), "rows_success": success, "rows_failed": failed, "errors": messages[:20]}
 
 
-def google_feed():
+def request_base_url(handler=None):
+    configured = os.environ.get("STORE_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
+    if handler:
+        host = handler.headers.get("X-Forwarded-Host") or handler.headers.get("Host")
+        if host:
+            proto = handler.headers.get("X-Forwarded-Proto")
+            if not proto:
+                proto = "http" if host.startswith(("127.0.0.1", "localhost")) else "https"
+            return f"{proto}://{host}".rstrip("/")
+    return BASE_URL.rstrip("/")
+
+
+def google_feed(base_url=None):
+    base_url = (base_url or BASE_URL).rstrip("/")
     products = list_products({}, public_only=True)
     rows = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">',
         "<channel>",
         "<title>Столиця Пак</title>",
-        f"<link>{html.escape(BASE_URL)}</link>",
+        f"<link>{html.escape(base_url)}</link>",
         "<description>Пакувальні матеріали та поліетиленові пакети</description>",
     ]
     for product in products:
@@ -514,7 +529,7 @@ def google_feed():
                 f"<g:id>{html.escape(product['sku'] or str(product['id']))}</g:id>",
                 f"<g:title>{html.escape(product['name'])}</g:title>",
                 f"<g:description>{html.escape(product['description'] or product['name'])}</g:description>",
-                f"<g:link>{html.escape(BASE_URL + '/product/' + product['slug'])}</g:link>",
+                f"<g:link>{html.escape(base_url + '/product/' + product['slug'])}</g:link>",
                 f"<g:image_link>{html.escape(product['image_url'])}</g:image_link>",
                 "<g:availability>in_stock</g:availability>" if product["stock_quantity"] > 0 else "<g:availability>out_of_stock</g:availability>",
                 f"<g:price>{product['retail_price']:.2f} UAH</g:price>",
@@ -526,9 +541,10 @@ def google_feed():
     return "\n".join(rows)
 
 
-def xml_feed():
+def xml_feed(base_url=None):
+    base_url = (base_url or BASE_URL).rstrip("/")
     products = list_products({}, public_only=True)
-    rows = ['<?xml version="1.0" encoding="UTF-8"?>', '<yml_catalog date="' + time.strftime("%Y-%m-%d %H:%M") + '">', "<shop>", "<name>Столиця Пак</name>", f"<url>{html.escape(BASE_URL)}</url>", "<currencies><currency id=\"UAH\" rate=\"1\"/></currencies>", "<categories>"]
+    rows = ['<?xml version="1.0" encoding="UTF-8"?>', '<yml_catalog date="' + time.strftime("%Y-%m-%d %H:%M") + '">', "<shop>", "<name>Столиця Пак</name>", f"<url>{html.escape(base_url)}</url>", "<currencies><currency id=\"UAH\" rate=\"1\"/></currencies>", "<categories>"]
     category_ids = set()
     for product in products:
         category_ids.add((product["category_id"], product["category_name"]))
@@ -539,7 +555,7 @@ def xml_feed():
         rows.extend(
             [
                 f'<offer id="{product["id"]}" available="{str(product["stock_quantity"] > 0).lower()}">',
-                f"<url>{html.escape(BASE_URL + '/product/' + product['slug'])}</url>",
+                f"<url>{html.escape(base_url + '/product/' + product['slug'])}</url>",
                 f"<price>{product['retail_price']:.2f}</price>",
                 "<currencyId>UAH</currencyId>",
                 f"<categoryId>{product['category_id']}</categoryId>",
@@ -553,26 +569,28 @@ def xml_feed():
     return "\n".join(rows)
 
 
-def sitemap():
+def sitemap(base_url=None):
+    base_url = (base_url or BASE_URL).rstrip("/")
     with db() as conn:
         categories = conn.execute("SELECT slug FROM categories WHERE active = 1").fetchall()
         products = conn.execute("SELECT slug FROM products WHERE active = 1").fetchall()
-    urls = [BASE_URL + "/"]
-    urls.extend(BASE_URL + "/category/" + row["slug"] for row in categories)
-    urls.extend(BASE_URL + "/product/" + row["slug"] for row in products)
+    urls = [base_url + "/"]
+    urls.extend(base_url + "/category/" + row["slug"] for row in categories)
+    urls.extend(base_url + "/product/" + row["slug"] for row in products)
     rows = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     rows.extend(f"<url><loc>{html.escape(url)}</loc><changefreq>daily</changefreq></url>" for url in urls)
     rows.append("</urlset>")
     return "\n".join(rows)
 
 
-def organization_jsonld():
+def organization_jsonld(base_url=None):
+    base_url = (base_url or BASE_URL).rstrip("/")
     return {
         "@context": "https://schema.org",
         "@type": "Organization",
         "name": "Столиця Пак",
-        "url": BASE_URL,
-        "logo": BASE_URL + "/uploads/brand/logo.png",
+        "url": base_url,
+        "logo": base_url + "/uploads/brand/logo.png",
         "description": "Інтернет-магазин пакувальних матеріалів та поліетиленових пакетів в Україні.",
         "telephone": ["+380501308187", "+380731308187"],
         "email": "solodovnik.ak@gmail.com",
@@ -596,25 +614,26 @@ def breadcrumbs_jsonld(items):
     }
 
 
-def page_meta(path):
+def page_meta(path, base_url=None):
+    base_url = (base_url or BASE_URL).rstrip("/")
     meta = {
         "title": "Столиця Пак - пакети від виробника оптом і в роздріб по Україні",
         "description": "Пакети від виробника для магазинів, кафе та бізнесу. Опт і роздріб, актуальні залишки, швидке оформлення замовлення та доставка по Україні.",
-        "url": BASE_URL + path,
+        "url": base_url + path,
         "robots": "index, follow",
         "og_type": "website",
-        "image": BASE_URL + "/uploads/brand/hero-packing.webp",
+        "image": base_url + "/uploads/brand/hero-packing.webp",
         "jsonld": {
             "@context": "https://schema.org",
             "@graph": [
-                organization_jsonld(),
+                organization_jsonld(base_url),
                 {
                     "@type": "WebSite",
                     "name": "Столиця Пак",
-                    "url": BASE_URL,
+                    "url": base_url,
                     "potentialAction": {
                         "@type": "SearchAction",
-                        "target": BASE_URL + "/?q={search_term_string}",
+                        "target": base_url + "/?q={search_term_string}",
                         "query-input": "required name=search_term_string",
                     },
                 },
@@ -639,10 +658,10 @@ def page_meta(path):
                     "jsonld": {
                         "@context": "https://schema.org",
                         "@graph": [
-                            organization_jsonld(),
+                            organization_jsonld(base_url),
                             breadcrumbs_jsonld([
-                                {"name": "Головна", "url": BASE_URL + "/"},
-                                {"name": row["name"], "url": BASE_URL + "/category/" + row["slug"]},
+                                {"name": "Головна", "url": base_url + "/"},
+                                {"name": row["name"], "url": base_url + "/category/" + row["slug"]},
                             ]),
                         ],
                     },
@@ -658,7 +677,7 @@ def page_meta(path):
                 (slug,),
             ).fetchone()
             if row:
-                product_url = BASE_URL + "/product/" + row["slug"]
+                product_url = base_url + "/product/" + row["slug"]
                 meta.update({
                     "title": row["seo_title"] or f"{row['name']} - Столиця Пак",
                     "description": row["seo_description"] or row["description"] or row["name"],
@@ -667,10 +686,10 @@ def page_meta(path):
                     "jsonld": {
                         "@context": "https://schema.org",
                         "@graph": [
-                            organization_jsonld(),
+                            organization_jsonld(base_url),
                             breadcrumbs_jsonld([
-                                {"name": "Головна", "url": BASE_URL + "/"},
-                                {"name": row["category_name"], "url": BASE_URL + "/category/" + row["category_slug"]},
+                                {"name": "Головна", "url": base_url + "/"},
+                                {"name": row["category_name"], "url": base_url + "/category/" + row["category_slug"]},
                                 {"name": row["name"], "url": product_url},
                             ]),
                             {
@@ -694,12 +713,12 @@ def page_meta(path):
     return meta
 
 
-def render_index(path):
+def render_index(path, base_url=None):
     index_path = DIST / "index.html"
     if not index_path.exists():
         index_path = ROOT / "index.html"
     content = index_path.read_text(encoding="utf-8")
-    meta = page_meta(path)
+    meta = page_meta(path, base_url)
     content = re.sub(r"<title>.*?</title>", lambda _: f"<title>{html.escape(meta['title'])}</title>", content, flags=re.S)
     content = re.sub(r'<meta name="description" content="[^"]*"', lambda _: f'<meta name="description" content="{html.escape(meta["description"])}"', content)
     content = re.sub(r'<meta name="robots" content="[^"]*"', lambda _: f'<meta name="robots" content="{html.escape(meta["robots"])}"', content)
@@ -784,15 +803,15 @@ class StoreHandler(SimpleHTTPRequestHandler):
                     rows = conn.execute("SELECT * FROM imports ORDER BY created_at DESC LIMIT 20").fetchall()
                 return send_json(self, {"items": [row_to_dict(row) for row in rows]})
             if path == "/feeds/google.xml":
-                return send_text(self, google_feed(), "application/xml; charset=utf-8")
+                return send_text(self, google_feed(request_base_url(self)), "application/xml; charset=utf-8")
             if path == "/feeds/products.xml":
-                return send_text(self, xml_feed(), "application/xml; charset=utf-8")
+                return send_text(self, xml_feed(request_base_url(self)), "application/xml; charset=utf-8")
             if path == "/sitemap.xml":
-                return send_text(self, sitemap(), "application/xml; charset=utf-8")
+                return send_text(self, sitemap(request_base_url(self)), "application/xml; charset=utf-8")
             if path == "/robots.txt":
-                return send_text(self, f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/admin/\n\nSitemap: {BASE_URL}/sitemap.xml\n")
+                return send_text(self, f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/admin/\n\nSitemap: {request_base_url(self)}/sitemap.xml\n")
             if path == "/" or path == "/admin" or path.startswith("/category/") or path.startswith("/product/"):
-                return send_text(self, render_index(path), "text/html; charset=utf-8")
+                return send_text(self, render_index(path, request_base_url(self)), "text/html; charset=utf-8")
             return super().do_GET()
         except Exception as exc:
             return send_json(self, {"error": str(exc)}, 500)

@@ -357,6 +357,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   margin-bottom: 24px;
 }
 .with-tools { align-items: end; }
+.section-action {
+  align-self: center;
+  white-space: nowrap;
+}
 .with-tools p, .page-head p, .info-grid p, footer p, .product-detail p {
   color: var(--muted);
   line-height: 1.7;
@@ -677,6 +681,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   gap: 10px;
   margin-top: 18px;
 }
+
+.product-service-block h2 {
+  margin: 22px 0 0;
+  font-size: 20px;
+}
+
 .commerce-notes article {
   display: grid;
   gap: 7px;
@@ -893,12 +903,34 @@ footer a:hover { color: var(--brand-2); }
   border-top: 1px solid var(--line);
   background: linear-gradient(180deg, #fff, #f8fbf7);
 }
+.checkout-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(32, 163, 74, .16);
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+}
+.checkout-total span {
+  color: var(--muted);
+  font-weight: 850;
+}
+.checkout-total strong {
+  color: var(--brand-dark);
+  font-size: 24px;
+  line-height: 1;
+}
 .checkout input, .checkout textarea {
   width: 100%;
   padding: 11px 12px;
 }
 .checkout textarea { min-height: 86px; resize: vertical; }
-.checkout button { min-height: 48px; }
+.checkout button {
+  min-height: 54px;
+  font-size: 16px;
+}
 
 .empty, .no-results {
   grid-column: 1 / -1;
@@ -1104,7 +1136,7 @@ footer a:hover { color: var(--brand-2); }
   }
   .site-footer { grid-template-columns: 1fr; }
   .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .product-grid { grid-template-columns: 1fr; }
+  .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .category-card { grid-template-rows: 170px 1fr; min-height: 310px; }
   .hero-panel { display: none; }
   .tools { justify-content: stretch; }
@@ -1133,6 +1165,7 @@ footer a:hover { color: var(--brand-2); }
 
 @media (max-width: 640px) {
   .category-grid { grid-template-columns: 1fr; }
+  .product-grid { grid-template-columns: 1fr; }
   .category-card { grid-template-rows: 180px 1fr; min-height: 320px; }
   .category-card-body { min-height: 140px; }
 }
