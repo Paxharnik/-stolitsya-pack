@@ -1,0 +1,16 @@
+{
+  "name": "stolitsya-pack-storefront",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "serve": "python3 server.py"
+  },
+  "dependencies": {
+    "vite": "^5.4.11"
+  },
+  "devDependencies": {}
+}

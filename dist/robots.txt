@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://packing.in.ua/sitemap.xml

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="675" viewBox="0 0 900 675" role="img" aria-labelledby="title desc">
+  <title id="title">Фото скоро буде</title>
+  <desc id="desc">Тимчасове зображення товару для каталогу Столиця Пак</desc>
+  <rect width="900" height="675" rx="28" fill="#f4f8f5"/>
+  <rect x="48" y="48" width="804" height="579" rx="24" fill="#ffffff" stroke="#d8e7dc" stroke-width="4"/>
+  <circle cx="450" cy="268" r="88" fill="#e8f5ec"/>
+  <path d="M378 290l42-46 44 39 29-30 31 37" fill="none" stroke="#16833a" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="500" cy="230" r="18" fill="#16833a"/>
+  <text x="450" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="46" font-weight="700" fill="#173c24">Фото скоро буде</text>
+  <text x="450" y="462" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#5c7465">Столиця Пак</text>
+</svg>

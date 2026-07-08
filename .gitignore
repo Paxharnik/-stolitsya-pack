@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local runtime/temp files
+*.tmp
+*.temp
+
+# SQLite transient files
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/*.sqlite-journal
+data/store.before-*.sqlite
+
+# Keep the current catalog database in git for this MVP
+!data/store.sqlite
+
+# Imported admin files are runtime artifacts; keep only the template
+imports/*
+!imports/products-template.csv
+
+# Uploaded product/category images are required by the current catalog
+!uploads/
+!uploads/**

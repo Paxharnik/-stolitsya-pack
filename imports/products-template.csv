@@ -1,0 +1,2 @@
+category_slug,category_name,sku,slug,name,description,retail_price,wholesale_price,stock_quantity,image_url,active,featured,seo_title,seo_description
+pakety-mayka,Пакети «Майка»,SKU-EXAMPLE,example-paket,Приклад товару для імпорту,Опис прикладу товару,100,90,20,https://example.com/image.webp,1,0,SEO title,SEO description
