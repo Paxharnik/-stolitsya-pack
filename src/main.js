@@ -51,6 +51,10 @@ const money = (value) => `${Number(value || 0).toFixed(2)} грн`;
 const byId = (items, id) => items.find((item) => Number(item.id) === Number(id));
 const esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
 const canonicalUrl = (path = location.pathname) => `${location.origin}${path}`;
+const shortText = (value = "", max = 80) => {
+  const text = String(value).replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
+};
 const icon = (name) => {
   const icons = {
     menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -299,7 +303,7 @@ function renderHome() {
         <div class="hero-copy">
           <span class="eyebrow">Столиця Пак</span>
           <h1>Пакеты от производителя — опт и розница по Украине</h1>
-          <p>Поліетиленові пакети, фасувальна упаковка, пакети з логотипом, одноразовий посуд і господарські товари для магазинів, кафе та виробництв.</p>
+          <p>Поліетиленові пакети, фасування, пакети з логотипом, посуд і господарські товари для бізнесу.</p>
           <div class="hero-badges">
             <span>${icon("box")}Власний каталог із наявністю</span>
             <span>${icon("percent")}Оптові ціни для бізнесу</span>
@@ -455,9 +459,17 @@ function renderCategorySection() {
         ${state.categories.map((category) => `
           <a class="category-card" href="/category/${category.slug}" data-link>
             <img src="${esc(category.image_url)}" alt="${esc(category.name)}" loading="lazy" />
-            <span>${icon("box")}<strong>${esc(category.name)}</strong><small>${esc(category.description || "Товари в наявності для опту та роздробу.")}</small></span>
+            <span class="category-card-body">
+              <strong>${esc(category.name)}</strong>
+              <small>${esc(shortText(category.description || "Товари в наявності для опту та роздробу.", 72))}</small>
+              <em>Переглянути ${icon("arrow")}</em>
+            </span>
           </a>
         `).join("")}
+      </div>
+      <div class="category-seo">
+        <h2>Упаковка для магазинів, кафе та виробництв</h2>
+        <p>У каталозі зібрані основні категорії пакувальних матеріалів Столиця Пак: пакети майка, фасувальні пакети, пакети в рулонах, пакети з логотипом, господарські товари, одноразовий посуд, рукавички та сміттєві пакети. Обирайте категорію, переглядайте ціни й залишки та оформлюйте замовлення через кошик.</p>
       </div>
     </section>
   `;
