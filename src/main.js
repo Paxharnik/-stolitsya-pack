@@ -3,7 +3,7 @@ import "./styles.css";
 const api = {
   async get(path) {
     const response = await fetch(path);
-    if (!response.ok) throw new Error((await response.json()).error || "API error");
+    if (!response.ok) throw new Error((await response.json()).error || "Помилка API");
     return response.json();
   },
   async send(path, method, body) {
@@ -13,7 +13,7 @@ const api = {
       body: JSON.stringify(body),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "API error");
+    if (!response.ok) throw new Error(data.error || "Помилка API");
     return data;
   },
   async upload(path, field, file) {
@@ -21,7 +21,7 @@ const api = {
     form.append(field, file);
     const response = await fetch(path, { method: "POST", body: form });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Upload error");
+    if (!response.ok) throw new Error(data.error || "Помилка завантаження");
     return data;
   },
 };
@@ -48,6 +48,7 @@ const state = {
 };
 
 const HOME_PRODUCT_LIMIT = 12;
+const HOME_ROW_LIMIT = 8;
 const money = (value) => `${Number(value || 0).toFixed(2)} грн`;
 const byId = (items, id) => items.find((item) => Number(item.id) === Number(id));
 const esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
@@ -152,7 +153,10 @@ function appPath() {
 
 function navigate(path) {
   history.pushState({}, "", path);
-  renderRoute();
+  renderRoute().then(() => {
+    const hash = new URL(path, location.origin).hash;
+    if (hash) document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function cartLines() {
@@ -238,6 +242,55 @@ function featuredProducts() {
   return [...featuredInStock, ...inStock, ...featuredUnavailable, ...unavailable].slice(0, HOME_PRODUCT_LIMIT);
 }
 
+function inStockProducts(limit = HOME_ROW_LIMIT) {
+  return state.products.filter((product) => product.active && product.stock_quantity > 0).slice(0, limit);
+}
+
+function newestProducts(limit = HOME_ROW_LIMIT) {
+  return [...state.products].filter((product) => product.active).reverse().slice(0, limit);
+}
+
+function searchProducts(query, limit = 5) {
+  const normalized = String(query || "").toLocaleLowerCase("uk-UA").trim();
+  if (!normalized) return [];
+  return state.products
+    .filter((product) => product.active && `${product.name} ${product.description} ${product.sku} ${product.category_name}`.toLocaleLowerCase("uk-UA").includes(normalized))
+    .slice(0, limit);
+}
+
+function trackRecentProduct(product) {
+  const key = "stolitsya-pack-recent";
+  const current = JSON.parse(localStorage.getItem(key) || "[]").filter((id) => Number(id) !== Number(product.id));
+  localStorage.setItem(key, JSON.stringify([product.id, ...current].slice(0, 8)));
+}
+
+function recentProducts(excludeId) {
+  const ids = JSON.parse(localStorage.getItem("stolitsya-pack-recent") || "[]");
+  return ids
+    .map((id) => byId(state.products, id))
+    .filter((product) => product && product.active && Number(product.id) !== Number(excludeId))
+    .slice(0, 4);
+}
+
+function renderLiveSearch(query = "") {
+  const results = searchProducts(query);
+  return `
+    <div class="live-search" data-live-search-box>
+      <label>${icon("search")}<input data-live-search value="${esc(query)}" type="search" placeholder="Пошук товарів, SKU, категорій" autocomplete="off" /></label>
+      ${query ? `
+        <div class="search-suggestions">
+          ${results.length ? results.map((product) => `
+            <a href="/product/${product.slug}" data-link>
+              <img src="${esc(product.image_url)}" alt="${esc(product.name)}" loading="lazy" />
+              <span><strong>${esc(product.name)}</strong><small>${money(product.retail_price)} · ${esc(product.category_name)}</small></span>
+            </a>
+          `).join("") : `<div class="search-empty">Нічого не знайдено</div>`}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 async function loadPublicData() {
   const data = await api.get("/api/bootstrap");
   state.categories = data.categories;
@@ -254,10 +307,12 @@ function layout(content) {
       <button class="menu-btn" data-menu>${icon("menu")}Меню</button>
       <nav class="desktop-nav" data-nav>
         <a href="/#catalog" data-link>${icon("catalog")}Каталог</a>
+        <a href="/#promo" data-link>${icon("percent")}Акції</a>
         <a href="/#delivery" data-link>${icon("truck")}Доставка</a>
         <a href="/#payment" data-link>${icon("card")}Оплата</a>
-        <a href="/admin" data-link>${icon("admin")}Адмін</a>
+        <a href="/#contacts" data-link>${icon("phone")}Контакти</a>
       </nav>
+      <div class="header-search">${renderLiveSearch()}</div>
       <button class="cart-button" data-open-cart>${icon("cart")}Кошик <span data-cart-count>${count}</span></button>
     </header>
     ${content}
@@ -305,7 +360,7 @@ function renderAdminLogin(error = "") {
       <form class="admin-form login-card" data-admin-login>
         <span class="eyebrow">Адмін-панель</span>
         <h1>Вхід</h1>
-        <p>Введіть пароль адміністратора, щоб керувати товарами, категоріями, баннерами та замовленнями.</p>
+        <p>Введіть пароль адміністратора, щоб керувати товарами, категоріями, банерами та замовленнями.</p>
         ${error ? `<div class="form-error">${esc(error)}</div>` : ""}
         <label>Пароль<input name="password" type="password" required autocomplete="current-password" /></label>
         <button type="submit">Увійти</button>
@@ -317,6 +372,7 @@ function renderAdminLogin(error = "") {
 
 function renderHome() {
   const banner = state.banners[0] || {};
+  const heroImage = "/uploads/brand/commercial-hero.jpg";
   setSeo({
     title: "Столиця Пак - пакети від виробника оптом і в роздріб по Україні",
     description: "Пакети від виробника для магазинів, кафе та бізнесу. Опт і роздріб, актуальні залишки, швидке оформлення замовлення та доставка по Україні.",
@@ -341,19 +397,19 @@ function renderHome() {
   });
   return layout(`
     <main>
-      <section class="hero" style="--hero-image:url('${esc(banner.image_url || "")}')">
+      <section class="hero" style="--hero-image:url('${heroImage}')">
         <div class="hero-copy">
-          <span class="eyebrow">Столиця Пак</span>
-          <h1>Пакеты от производителя — опт и розница по Украине</h1>
-          <p>Поліетиленові пакети, фасування, пакети з логотипом, посуд і господарські товари для бізнесу.</p>
+          <span class="eyebrow">Виробник упаковки</span>
+          <h1>Пакети від виробника<br><span>Опт та роздріб по Україні</span></h1>
+          <p>Поліетиленові пакети, пакети майка, фасування, BMW, сміттєві пакети та упаковка для бізнесу з актуальними цінами й залишками.</p>
           <div class="hero-badges">
-            <span>${icon("box")}Власний каталог із наявністю</span>
-            <span>${icon("percent")}Оптові ціни для бізнесу</span>
-            <span>${icon("truck")}Відправка по всій Україні</span>
+            <span>${icon("box")}Власне виробництво</span>
+            <span>${icon("percent")}Оптові умови</span>
+            <span>${icon("truck")}Доставка по Україні</span>
           </div>
           <div class="hero-actions">
             <a class="primary" href="#categories" data-link>${icon("catalog")}Перейти в каталог</a>
-            <a class="secondary" href="tel:+380501308187">${icon("phone")}Связаться</a>
+            <a class="secondary" href="tel:+380501308187">${icon("phone")}Зв'язатися</a>
           </div>
         </div>
         <div class="hero-panel">
@@ -362,10 +418,16 @@ function renderHome() {
           <div>${icon("truck")}<strong>1-2 дні</strong><span>обробка замовлення</span></div>
         </div>
       </section>
+      ${renderPromoSection()}
       ${renderBenefitsSection()}
       ${renderCategorySection()}
+      ${renderProductShelf("Хіти продажу", "Популярні позиції з наявністю для швидкого замовлення.", inStockProducts(8), "Хіти продажу")}
+      ${renderProductShelf("Новинки", "Свіжі позиції каталогу для магазинів, кафе та виробництв.", newestProducts(8), "Новинки")}
       ${renderFeaturedSection()}
+      ${renderWhySection()}
       ${renderInfoSections()}
+      ${renderReviewsSection()}
+      ${renderContactsSection()}
     </main>
   `);
 }
@@ -408,6 +470,8 @@ function renderCategoryPage(slug) {
 function renderProductPage(slug) {
   const product = state.products.find((item) => item.slug === slug);
   if (!product) return renderNotFound();
+  const recent = recentProducts(product.id);
+  trackRecentProduct(product);
   setSeo({
     title: product.seo_title || `${product.name} - Столиця Пак`,
     description: product.seo_description || product.description,
@@ -485,6 +549,14 @@ function renderProductPage(slug) {
           <div class="product-grid">${related.map(renderProductCard).join("")}</div>
         </section>
       ` : ""}
+      ${recent.length ? `
+        <section class="section related-products recent-products">
+          <div class="section-title">
+            <div><span class="eyebrow">Переглядали</span><h2>Нещодавно переглянуті товари</h2></div>
+          </div>
+          <div class="product-grid compact-grid">${recent.map(renderProductCard).join("")}</div>
+        </section>
+      ` : ""}
     </main>
   `);
 }
@@ -520,6 +592,56 @@ function renderCategorySection() {
   `;
 }
 
+function renderPromoSection() {
+  const promos = [
+    {
+      title: "Оптові ціни від виробника",
+      text: "Вигідні умови для магазинів, складів, кафе та виробництв.",
+      image: "/uploads/brand/commercial-hero.jpg",
+      href: "/#catalog",
+      label: "Перейти в каталог",
+    },
+    {
+      title: "Пакети майка",
+      text: "Популярні розміри, різні кольори та щільність для щоденної роботи.",
+      image: "/uploads/brand/promo-maika.jpg",
+      href: "/category/paketi-majka",
+      label: "До категорії",
+    },
+    {
+      title: "Фасувальні пакети",
+      text: "Для продуктів, магазинів, дому та виробництва.",
+      image: "/uploads/brand/promo-fasuvannya.jpg",
+      href: "/category/fasuvalni-paketi",
+      label: "До категорії",
+    },
+    {
+      title: "Господарські товари",
+      text: "Рушники, губки, рукавички та товари для чистоти щодня.",
+      image: "/uploads/brand/promo-gospodarski.jpg",
+      href: "/category/gospodarski-tovari",
+      label: "До категорії",
+    },
+  ];
+  return `
+    <section class="section promo-section" id="promo">
+      <div class="section-title">
+        <div><span class="eyebrow">Пропозиції</span><h2>Швидкий вибір для бізнесу</h2><p>Найпопулярніші напрямки каталогу з фото, зрозумілими перевагами та прямим переходом до товарів.</p></div>
+      </div>
+      <div class="promo-grid">
+        ${promos.map((promo) => `
+          <a class="promo-card" href="${promo.href}" data-link style="--promo-image:url('${promo.image}')">
+            <span>${icon("percent")}Столиця Пак</span>
+            <strong>${esc(promo.title)}</strong>
+            <small>${esc(promo.text)}</small>
+            <em>${esc(promo.label)} ${icon("arrow")}</em>
+          </a>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderFeaturedSection() {
   const items = featuredProducts();
   return `
@@ -539,13 +661,47 @@ function renderFeaturedSection() {
   `;
 }
 
+function renderProductShelf(title, description, items, eyebrowText) {
+  if (!items.length) return "";
+  return `
+    <section class="section catalog product-shelf">
+      <div class="section-title with-tools">
+        <div>
+          <span class="eyebrow">${esc(eyebrowText)}</span>
+          <h2>${esc(title)}</h2>
+          <p>${esc(description)}</p>
+        </div>
+        <a class="secondary light" href="#categories" data-link>${icon("catalog")}Усі категорії</a>
+      </div>
+      <div class="product-grid compact-grid">
+        ${items.map(renderProductCard).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderBenefitsSection() {
   return `
     <section class="benefits" aria-label="Переваги">
-      <article>${icon("shield")}<strong>Надійна упаковка</strong><span>Підбираємо товари для магазинів, складів, кафе та виробництв.</span></article>
-      <article>${icon("percent")}<strong>Опт і роздріб</strong><span>У картці товару одразу видно роздрібну та оптову ціну.</span></article>
-      <article>${icon("truck")}<strong>Доставка по Україні</strong><span>Замовлення зберігається в системі, менеджер швидко уточнює деталі.</span></article>
-      <article>${icon("check")}<strong>120 товарів</strong><span>Актуальний каталог з категоріями, цінами, залишками та фото.</span></article>
+      <article>${icon("shield")}<strong>Стабільна якість</strong><span>Пакування для щоденної роботи бізнесу без зайвої метушні.</span></article>
+      <article>${icon("percent")}<strong>Опт і роздріб</strong><span>Роздрібна та оптова ціна одразу в картці товару.</span></article>
+      <article>${icon("truck")}<strong>Доставка по Україні</strong><span>Менеджер швидко уточнює деталі після оформлення.</span></article>
+      <article>${icon("check")}<strong>120 товарів</strong><span>Каталог з категоріями, цінами, залишками та фото.</span></article>
+    </section>
+  `;
+}
+
+function renderWhySection() {
+  return `
+    <section class="section why-section">
+      <div class="section-title">
+        <div><span class="eyebrow">Чому ми</span><h2>Столиця Пак для дому, магазину та виробництва</h2><p>Ми зробили MVP-магазин максимально простим: оберіть категорію, додайте товар у кошик і залиште контакти для підтвердження замовлення.</p></div>
+      </div>
+      <div class="why-grid">
+        <article>${icon("box")}<strong>Великий асортимент</strong><span>Пакети майка, фасування, рулони, посуд, рукавички та господарські товари.</span></article>
+        <article>${icon("shield")}<strong>Зрозуміла наявність</strong><span>Залишок видно до оформлення, тому клієнт швидше приймає рішення.</span></article>
+        <article>${icon("phone")}<strong>Живе підтвердження</strong><span>Після заявки менеджер уточнює оплату, доставку та оптові умови.</span></article>
+      </div>
     </section>
   `;
 }
@@ -603,8 +759,39 @@ function renderProductCard(product) {
 function renderInfoSections() {
   return `
     <section class="info-grid" id="delivery">
-      <article>${icon("truck")}<span class="eyebrow">Доставка</span><h2>Нова Пошта по Україні</h2><p>На етапі MVP клієнт вводить місто та відділення вручну. Інтеграція API Нової Пошти підготовлена як майбутній adapter.</p></article>
-      <article id="payment">${icon("card")}<span class="eyebrow">Оплата</span><h2>Підтвердження менеджером</h2><p>Онлайн-оплата поки не підключена. Замовлення зберігається в адмін-панелі, менеджер підтверджує оплату та доставку телефоном.</p></article>
+      <article>${icon("truck")}<span class="eyebrow">Доставка</span><h2>Доставка по Україні</h2><p>Під час оформлення замовлення вкажіть місто та відділення Нової Пошти. Менеджер підтвердить деталі телефоном.</p></article>
+      <article id="payment">${icon("card")}<span class="eyebrow">Оплата</span><h2>Оплата після підтвердження</h2><p>Онлайн-оплата поки не підключена. Замовлення зберігається в адмін-панелі, менеджер узгоджує оплату та доставку.</p></article>
+    </section>
+  `;
+}
+
+function renderReviewsSection() {
+  return `
+    <section class="section reviews-section">
+      <div class="section-title">
+        <div><span class="eyebrow">Відгуки</span><h2>Клієнти обирають простоту</h2><p>Блок підготовлений для реальних відгуків після запуску. Зараз показані типові сценарії покупців.</p></div>
+      </div>
+      <div class="review-grid">
+        <article><strong>Магазин біля дому</strong><p>“Швидко знайшли пакети майка, додали в кошик і залишили заявку. Зручно, що видно оптову ціну.”</p></article>
+        <article><strong>Кафе та доставка</strong><p>“Фасування, рукавички й одноразовий посуд можна замовити в одному місці.”</p></article>
+        <article><strong>Виробництво</strong><p>“Категорії зрозумілі, товарні картки містять ціну, залишок і SKU.”</p></article>
+      </div>
+    </section>
+  `;
+}
+
+function renderContactsSection() {
+  return `
+    <section class="section contacts-section" id="contacts">
+      <div>
+        <span class="eyebrow">Контакти</span>
+        <h2>Потрібна консультація щодо упаковки?</h2>
+        <p>Зателефонуйте або оформіть замовлення через кошик. Ми допоможемо підібрати розмір, щільність і кількість.</p>
+      </div>
+      <div class="contact-actions">
+        <a class="primary" href="tel:+380501308187">${icon("phone")}+38 (050) 130-81-87</a>
+        <a class="secondary light" href="mailto:solodovnik.ak@gmail.com">${icon("message")}Написати на email</a>
+      </div>
     </section>
   `;
 }
@@ -652,7 +839,7 @@ function renderCart() {
 }
 
 async function renderAdmin() {
-  setSeo({ title: "Адмін-панель - Столиця Пак", description: "Керування товарами, категоріями, баннерами та замовленнями." });
+  setSeo({ title: "Адмін-панель - Столиця Пак", description: "Керування товарами, категоріями, банерами та замовленнями." });
   const session = await api.get("/api/admin/session");
   state.adminAuthenticated = session.authenticated;
   if (!state.adminAuthenticated) {
@@ -662,7 +849,7 @@ async function renderAdmin() {
   await loadAdminData();
   document.querySelector("#app").innerHTML = layout(`
     <main class="admin">
-      <section class="page-head"><span class="eyebrow">MVP admin</span><h1>Адмін-панель</h1><p>Керуйте товарами, категоріями, баннерами та замовленнями.</p><button class="secondary admin-logout" data-admin-logout>Вийти</button></section>
+      <section class="page-head"><span class="eyebrow">Адміністрування</span><h1>Адмін-панель</h1><p>Керуйте товарами, категоріями, банерами та замовленнями.</p><button class="secondary admin-logout" data-admin-logout>Вийти</button></section>
       <nav class="admin-tabs">
         <button data-admin-tab="products">Товари</button>
         <button data-admin-tab="categories">Категорії</button>
@@ -749,7 +936,7 @@ function renderAdminBanners(edit = {}) {
   return `
     <div class="admin-grid">
       <form class="admin-form" data-banner-form data-id="${edit.id || ""}">
-        <h2>${edit.id ? "Редагувати баннер" : "Новий баннер"}</h2>
+        <h2>${edit.id ? "Редагувати банер" : "Новий банер"}</h2>
         ${input("title", "Заголовок", edit.title, true)}
         <label>Підзаголовок<textarea name="subtitle">${esc(edit.subtitle || "")}</textarea></label>
         ${imageInput("image_url", edit.image_url)}
@@ -757,7 +944,7 @@ function renderAdminBanners(edit = {}) {
         ${input("button_text", "Текст кнопки", edit.button_text || "До каталогу")}
         ${input("sort_order", "Сортування", edit.sort_order || 0, false, "number")}
         <label class="check"><input name="active" type="checkbox" ${edit.active ?? true ? "checked" : ""} /> Активний</label>
-        <button type="submit">Зберегти баннер</button>
+        <button type="submit">Зберегти банер</button>
       </form>
       <div class="admin-list">${state.admin.banners.map((banner) => `
         <div class="admin-row"><img src="${esc(banner.image_url)}" alt="" /><div><strong>${esc(banner.title)}</strong><span>${esc(banner.subtitle || "")}</span></div><button data-edit-banner="${banner.id}">Редагувати</button><button data-delete-banner="${banner.id}">Видалити</button></div>
@@ -851,7 +1038,7 @@ async function submitOrder(form) {
   document.querySelector("[data-cart-drawer]").classList.remove("open");
   await loadPublicData();
   renderRoute();
-  flash(`Спасибо, заказ принят. Номер заказа #${order.id}`, 5200);
+  flash(`Дякуємо, замовлення прийнято. Номер замовлення #${order.id}`, 5200);
 }
 
 async function renderRoute() {
@@ -914,7 +1101,7 @@ document.addEventListener("click", async (event) => {
   if (editBanner) document.querySelector("[data-admin-content]").innerHTML = renderAdminBanners(byId(state.admin.banners, editBanner.dataset.editBanner));
   if (deleteProduct && confirm("Видалити товар?")) { await api.send(`/api/admin/products/${deleteProduct.dataset.deleteProduct}`, "DELETE", {}); await refreshAdmin("products"); }
   if (deleteCategory && confirm("Видалити категорію?")) { await api.send(`/api/admin/categories/${deleteCategory.dataset.deleteCategory}`, "DELETE", {}); await refreshAdmin("categories"); }
-  if (deleteBanner && confirm("Видалити баннер?")) { await api.send(`/api/admin/banners/${deleteBanner.dataset.deleteBanner}`, "DELETE", {}); await refreshAdmin("banners"); }
+  if (deleteBanner && confirm("Видалити банер?")) { await api.send(`/api/admin/banners/${deleteBanner.dataset.deleteBanner}`, "DELETE", {}); await refreshAdmin("banners"); }
 });
 
 document.addEventListener("input", (event) => {
@@ -926,6 +1113,15 @@ document.addEventListener("input", (event) => {
     state.filters[key] = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     const section = document.querySelector(".catalog");
     if (section) section.outerHTML = renderCatalogSection();
+  }
+  if (event.target.matches("[data-live-search]")) {
+    const box = event.target.closest("[data-live-search-box]");
+    if (box) box.outerHTML = renderLiveSearch(event.target.value);
+    const nextInput = document.querySelector("[data-live-search]");
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+    }
   }
   if (event.target.matches("[data-qty-input]")) updateCart(Number(event.target.dataset.qtyInput), event.target.value);
 });
