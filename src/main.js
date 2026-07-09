@@ -442,31 +442,20 @@ function renderHome() {
       <section class="hero" style="--hero-image:url('${heroImage}')">
         <div class="hero-copy">
           <span class="eyebrow">Виробник упаковки</span>
-          <h1>Пакети від виробника</h1>
-          <strong class="hero-accent">Опт та роздріб<br>по Україні</strong>
-          <p>Пакувальні матеріали для магазинів, кафе, виробництв і дому. Актуальний каталог, зрозумілі ціни та швидке оформлення замовлення.</p>
-          <div class="hero-categories" aria-label="Основні категорії">
-            <span>Поліетиленові пакети</span>
-            <span>Пакети Майка</span>
-            <span>Фасувальні пакети</span>
-            <span>Пакети BMW</span>
-            <span>Сміттєві пакети</span>
-            <span>Одноразовий посуд</span>
-            <span>Господарські товари</span>
-          </div>
+          <p class="hero-kicker">Ми не просто інтернет-магазин.</p>
+          <h1>Ми виробник упаковки</h1>
+          <strong class="hero-accent">Пакети оптом і в роздріб по Україні</strong>
+          <p class="hero-lead">Поліетиленові пакети, фасування, пакети Майка, сміттєві пакети, одноразовий посуд і господарські товари напряму від українського виробника.</p>
           <div class="hero-actions">
             <a class="primary" href="#categories" data-link>${icon("catalog")}Перейти в каталог</a>
             <a class="secondary" href="#contacts" data-link>${icon("percent")}Отримати оптовий прайс</a>
           </div>
         </div>
-        <div class="hero-visual">
-          <img src="${heroImage}" alt="Пакети та пакувальні матеріали Столиця Пак" />
-        </div>
         <div class="hero-panel" aria-label="Переваги магазину">
           <div><strong>${state.products.filter((p) => p.active).length}+</strong><span>товарів</span></div>
           <div><strong>${state.categories.length}</strong><span>категорій</span></div>
           <div><strong>Відправка</strong><span>по Україні</span></div>
-          <div><strong>Опт</strong><span>від виробника</span></div>
+          <div><strong>Оптові</strong><span>ціни</span></div>
         </div>
       </section>
       ${renderPromoSection()}
