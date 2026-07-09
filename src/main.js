@@ -57,6 +57,20 @@ const shortText = (value = "", max = 80) => {
   const text = String(value).replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
 };
+const productAttribute = (description = "", labels = []) => {
+  const lines = String(description).split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const found = lines.find((line) => labels.some((label) => line.toLocaleLowerCase("uk-UA").startsWith(`${label.toLocaleLowerCase("uk-UA")}:`)));
+  return found ? found.replace(/^[^:]+:\s*/, "").trim() : "";
+};
+const productCardBadges = (product) => {
+  const badges = [];
+  if (product.featured) badges.push({ text: "🔥 Хіт продажу", type: "hot" });
+  if (Number(product.wholesale_price || 0) > 0 && Number(product.wholesale_price) < Number(product.retail_price || 0)) badges.push({ text: "💰 Опт", type: "opt" });
+  if (product.category_slug === "paketi-z-logotipom") badges.push({ text: "🏷 Акція", type: "sale" });
+  if (Date.now() - new Date(product.created_at || 0).getTime() < 1000 * 60 * 60 * 24 * 45) badges.push({ text: "⭐ Новинка", type: "new" });
+  badges.push({ text: "🏭 Від виробника", type: "maker" });
+  return badges.slice(0, 2);
+};
 const icon = (name) => {
   const icons = {
     menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -276,7 +290,7 @@ function renderLiveSearch(query = "") {
   const results = searchProducts(query);
   return `
     <div class="live-search" data-live-search-box>
-      <label>${icon("search")}<input data-live-search value="${esc(query)}" type="search" placeholder="Пошук товарів, SKU, категорій" autocomplete="off" /></label>
+      <label aria-label="Пошук товарів">${icon("search")}<input data-live-search value="${esc(query)}" type="search" placeholder="Пошук товарів, SKU, категорій" autocomplete="off" /></label>
       ${query ? `
         <div class="search-suggestions">
           ${results.length ? results.map((product) => `
@@ -287,6 +301,28 @@ function renderLiveSearch(query = "") {
           `).join("") : `<div class="search-empty">Нічого не знайдено</div>`}
         </div>
       ` : ""}
+    </div>
+  `;
+}
+
+function renderCatalogDropdown() {
+  return `
+    <div class="catalog-menu" data-catalog-menu>
+      <button class="catalog-trigger" type="button" data-catalog-toggle aria-expanded="false">${icon("catalog")}Каталог</button>
+      <div class="catalog-dropdown" data-catalog-dropdown>
+        <div class="catalog-dropdown-head">
+          <strong>Категорії товарів</strong>
+          <span>${state.categories.length} напрямків упаковки</span>
+        </div>
+        <div class="catalog-dropdown-grid">
+          ${state.categories.map((category) => `
+            <a href="/category/${category.slug}" data-link>
+              <strong>${esc(category.name)}</strong>
+              <small>${esc(shortText(category.description || "Товари для опту та роздробу.", 74))}</small>
+            </a>
+          `).join("")}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -304,15 +340,21 @@ function layout(content) {
   return `
     <header class="topbar">
       <a class="brand" href="/" data-link><span class="brand-mark"><img src="/uploads/brand/logo.png" alt="Столиця Пак" /></span><strong>Столиця Пак</strong><small>упаковка для бізнесу</small></a>
+      ${renderCatalogDropdown()}
+      <div class="header-search">${renderLiveSearch()}</div>
+      <div class="header-contact">
+        <span>Потрібна допомога?</span>
+        <a href="tel:+380501308187">+38 (050) 130-81-87</a>
+      </div>
       <button class="menu-btn" data-menu>${icon("menu")}Меню</button>
       <nav class="desktop-nav" data-nav>
-        <a href="/#catalog" data-link>${icon("catalog")}Каталог</a>
+        <a class="mobile-only" href="/#categories" data-link>${icon("catalog")}Каталог</a>
         <a href="/#promo" data-link>${icon("percent")}Акції</a>
         <a href="/#delivery" data-link>${icon("truck")}Доставка</a>
         <a href="/#payment" data-link>${icon("card")}Оплата</a>
         <a href="/#contacts" data-link>${icon("phone")}Контакти</a>
+        <a class="mobile-only" href="/admin" data-link>${icon("admin")}Адмін</a>
       </nav>
-      <div class="header-search">${renderLiveSearch()}</div>
       <button class="cart-button" data-open-cart>${icon("cart")}Кошик <span data-cart-count>${count}</span></button>
     </header>
     ${content}
@@ -400,22 +442,31 @@ function renderHome() {
       <section class="hero" style="--hero-image:url('${heroImage}')">
         <div class="hero-copy">
           <span class="eyebrow">Виробник упаковки</span>
-          <h1>Пакети від виробника<br><span>Опт та роздріб по Україні</span></h1>
-          <p>Поліетиленові пакети, пакети майка, фасування, BMW, сміттєві пакети та упаковка для бізнесу з актуальними цінами й залишками.</p>
-          <div class="hero-badges">
-            <span>${icon("box")}Власне виробництво</span>
-            <span>${icon("percent")}Оптові умови</span>
-            <span>${icon("truck")}Доставка по Україні</span>
+          <h1>Пакети від виробника</h1>
+          <strong class="hero-accent">Опт та роздріб<br>по Україні</strong>
+          <p>Пакувальні матеріали для магазинів, кафе, виробництв і дому. Актуальний каталог, зрозумілі ціни та швидке оформлення замовлення.</p>
+          <div class="hero-categories" aria-label="Основні категорії">
+            <span>Поліетиленові пакети</span>
+            <span>Пакети Майка</span>
+            <span>Фасувальні пакети</span>
+            <span>Пакети BMW</span>
+            <span>Сміттєві пакети</span>
+            <span>Одноразовий посуд</span>
+            <span>Господарські товари</span>
           </div>
           <div class="hero-actions">
             <a class="primary" href="#categories" data-link>${icon("catalog")}Перейти в каталог</a>
-            <a class="secondary" href="tel:+380501308187">${icon("phone")}Зв'язатися</a>
+            <a class="secondary" href="#contacts" data-link>${icon("percent")}Отримати оптовий прайс</a>
           </div>
         </div>
-        <div class="hero-panel">
-          <div>${icon("box")}<strong>${state.products.filter((p) => p.active).length}</strong><span>товарів у каталозі</span></div>
-          <div>${icon("catalog")}<strong>${state.categories.length}</strong><span>категорій</span></div>
-          <div>${icon("truck")}<strong>1-2 дні</strong><span>обробка замовлення</span></div>
+        <div class="hero-visual">
+          <img src="${heroImage}" alt="Пакети та пакувальні матеріали Столиця Пак" />
+        </div>
+        <div class="hero-panel" aria-label="Переваги магазину">
+          <div><strong>${state.products.filter((p) => p.active).length}+</strong><span>товарів</span></div>
+          <div><strong>${state.categories.length}</strong><span>категорій</span></div>
+          <div><strong>Відправка</strong><span>по Україні</span></div>
+          <div><strong>Опт</strong><span>від виробника</span></div>
         </div>
       </section>
       ${renderPromoSection()}
@@ -472,6 +523,12 @@ function renderProductPage(slug) {
   if (!product) return renderNotFound();
   const recent = recentProducts(product.id);
   trackRecentProduct(product);
+  const inStock = Number(product.stock_quantity || 0) > 0;
+  const size = productAttribute(product.description, ["Розмір", "Размер"]) || product.sku || "-";
+  const pack = productAttribute(product.description, ["Кількість", "Количество", "Упаковка"]) || product.category_name || "-";
+  const material = productAttribute(product.description, ["Матеріал", "Материал"]) || "-";
+  const purpose = productAttribute(product.description, ["Призначення", "Назначение"]) || "-";
+  const descriptionHtml = esc(product.description || "Якісна упаковка для щоденної роботи бізнесу та роздрібних покупців.").replace(/\n/g, "<br>");
   setSeo({
     title: product.seo_title || `${product.name} - Столиця Пак`,
     description: product.seo_description || product.description,
@@ -506,55 +563,117 @@ function renderProductPage(slug) {
   });
   const related = state.products
     .filter((item) => item.active && item.category_slug === product.category_slug && item.id !== product.id)
-    .slice(0, 4);
+    .slice(0, 10);
   return layout(`
     <main>
       <section class="product-page">
-        <div class="product-media"><img src="${esc(product.image_url)}" alt="${esc(product.name)}" loading="lazy" /></div>
+        <div class="product-gallery">
+          <a class="product-main-photo" href="${esc(product.image_url)}" target="_blank" rel="noopener" title="Відкрити фото у великому розмірі">
+            <img src="${esc(product.image_url)}" alt="${esc(product.name)}" />
+            <span>Збільшити фото</span>
+          </a>
+          <div class="product-thumbs" aria-label="Фото товару">
+            <button class="active" type="button" aria-label="Основне фото"><img src="${esc(product.image_url)}" alt="" /></button>
+          </div>
+        </div>
         <div class="product-detail">
           <a class="breadcrumb" href="/category/${product.category_slug}" data-link>${esc(product.category_name)}</a>
           <h1>${esc(product.name)}</h1>
-          <p class="lead">${esc(product.description || "Якісна упаковка для щоденної роботи бізнесу та роздрібних покупців.")}</p>
-          <div class="price-box">
-            <strong>${money(product.retail_price)}</strong>
-            <span>Опт: ${money(product.wholesale_price)}</span>
-            <span>Залишок: ${product.stock_quantity} шт</span>
+          <div class="product-meta-line">
+            <span>Артикул: <strong>${esc(product.sku || "-")}</strong></span>
+            <span>Категорія: <a href="/category/${product.category_slug}" data-link>${esc(product.category_name)}</a></span>
           </div>
-          <button class="add-btn wide" data-add="${product.id}" ${product.stock_quantity <= 0 ? "disabled" : ""}>${icon("cart")}Додати до кошика</button>
-          <section class="product-service-block" aria-labelledby="product-service-title">
-            <h2 id="product-service-title">Доставка / Оплата / Опт</h2>
-            <div class="commerce-notes">
-            <article>${icon("truck")}<strong>Доставка</strong><span>Відправляємо по Україні після підтвердження менеджером.</span></article>
-            <article>${icon("card")}<strong>Оплата</strong><span>Оплата узгоджується телефоном після оформлення замовлення.</span></article>
-            <article>${icon("percent")}<strong>Опт</strong><span>Для оптових покупців діє окрема ціна: ${money(product.wholesale_price)}.</span></article>
+          <div class="product-buy-card" data-product-summary data-price="${Number(product.retail_price || 0)}">
+            <span class="stock-badge ${inStock ? "in-stock" : "preorder"}">${inStock ? "В наявності" : "Під замовлення"}</span>
+            <div class="price-box">
+              <strong>${money(product.retail_price)}</strong>
+              <span>Оптова ціна: ${money(product.wholesale_price)}</span>
+              <span>${inStock ? `Залишок: ${product.stock_quantity} шт` : "Менеджер уточнить термін постачання"}</span>
             </div>
-          </section>
-          <div class="specs">
-            <h2>Характеристики</h2>
-            <dl>
-              <div><dt>SKU</dt><dd>${esc(product.sku || "-")}</dd></div>
-              <div><dt>Категорія</dt><dd>${esc(product.category_name)}</dd></div>
-              <div><dt>Роздрібна ціна</dt><dd>${money(product.retail_price)}</dd></div>
-              <div><dt>Оптова ціна</dt><dd>${money(product.wholesale_price)}</dd></div>
-              <div><dt>Наявність</dt><dd>${product.stock_quantity > 0 ? `${product.stock_quantity} шт` : "Немає в наявності"}</dd></div>
-            </dl>
+            <div class="product-qty-box">
+              <span>Кількість</span>
+              <div class="product-qty-control">
+                <button type="button" data-product-qty-step="-1" ${!inStock ? "disabled" : ""}>−</button>
+                <input data-product-qty value="1" inputmode="numeric" ${!inStock ? "disabled" : ""} />
+                <button type="button" data-product-qty-step="1" ${!inStock ? "disabled" : ""}>+</button>
+              </div>
+              <strong>Разом: <span data-product-total>${money(product.retail_price)}</span></strong>
+            </div>
+            <button class="add-btn wide product-page-add" data-add="${product.id}" ${!inStock ? "disabled" : ""}>${icon("cart")}До кошика</button>
+            <div class="product-page-perks">
+              <span>🚚 Швидка доставка</span>
+              <span>🏭 Від виробника</span>
+              <span>🇺🇦 Доставка по Україні</span>
+              <span>💰 Оптові ціни</span>
+            </div>
           </div>
         </div>
       </section>
+      <section class="section product-tabs-section">
+        <div class="product-tabs" role="tablist" aria-label="Інформація про товар">
+          <button class="active" type="button" data-product-tab="description">Опис</button>
+          <button type="button" data-product-tab="specs">Характеристики</button>
+          <button type="button" data-product-tab="delivery">Доставка</button>
+          <button type="button" data-product-tab="payment">Оплата</button>
+          <button type="button" data-product-tab="wholesale">Опт</button>
+        </div>
+        <div class="product-tab-panel active" data-product-pane="description">
+          <h2>Опис</h2>
+          <p>${descriptionHtml}</p>
+        </div>
+        <div class="product-tab-panel" data-product-pane="specs">
+          <h2>Характеристики</h2>
+          <dl class="specs-list">
+            <div><dt>SKU</dt><dd>${esc(product.sku || "-")}</dd></div>
+            <div><dt>Категорія</dt><dd>${esc(product.category_name)}</dd></div>
+            <div><dt>Розмір</dt><dd>${esc(size)}</dd></div>
+            <div><dt>В упаковці</dt><dd>${esc(pack)}</dd></div>
+            <div><dt>Матеріал</dt><dd>${esc(material)}</dd></div>
+            <div><dt>Призначення</dt><dd>${esc(purpose)}</dd></div>
+            <div><dt>Роздрібна ціна</dt><dd>${money(product.retail_price)}</dd></div>
+            <div><dt>Оптова ціна</dt><dd>${money(product.wholesale_price)}</dd></div>
+            <div><dt>Наявність</dt><dd>${inStock ? `${product.stock_quantity} шт` : "Під замовлення"}</dd></div>
+          </dl>
+        </div>
+        <div class="product-tab-panel" data-product-pane="delivery">
+          <h2>Доставка</h2>
+          <p>Відправляємо замовлення по Україні після підтвердження менеджером. Деталі доставки та зручне відділення узгоджуються під час обробки замовлення.</p>
+        </div>
+        <div class="product-tab-panel" data-product-pane="payment">
+          <h2>Оплата</h2>
+          <p>Оплата узгоджується телефоном після оформлення замовлення. Менеджер підтвердить наявність, суму та спосіб оплати.</p>
+        </div>
+        <div class="product-tab-panel" data-product-pane="wholesale">
+          <h2>Опт</h2>
+          <p>Для оптових покупців діє окрема ціна: <strong>${money(product.wholesale_price)}</strong>. Залиште замовлення, і менеджер уточнить умови для вашого обсягу.</p>
+        </div>
+      </section>
+      <section class="section product-trust">
+        <div class="section-title">
+          <div><span class="eyebrow">Довіра</span><h2>Чому купують у Столиця ПАК?</h2></div>
+        </div>
+        <div class="trust-grid">
+          <article>${icon("box")}<strong>Власне виробництво</strong><span>Пакувальні матеріали напряму від виробника.</span></article>
+          <article>${icon("shield")}<strong>Контроль якості</strong><span>Стежимо за якістю товарів перед відправкою.</span></article>
+          <article>${icon("percent")}<strong>Оптові ціни</strong><span>Окремі умови для магазинів, кафе та складів.</span></article>
+          <article>${icon("truck")}<strong>Швидка відправка</strong><span>Оперативно підтверджуємо і готуємо замовлення.</span></article>
+          <article>${icon("check")}<strong>Доставка по Україні</strong><span>Відправляємо замовлення в різні міста України.</span></article>
+        </div>
+      </section>
       ${related.length ? `
-        <section class="section related-products">
+        <section class="section related-products product-carousel-section">
           <div class="section-title">
             <div><span class="eyebrow">Схожі товари</span><h2>Ще з цієї категорії</h2></div>
           </div>
-          <div class="product-grid">${related.map(renderProductCard).join("")}</div>
+          <div class="product-carousel">${related.map(renderProductCard).join("")}</div>
         </section>
       ` : ""}
       ${recent.length ? `
-        <section class="section related-products recent-products">
+        <section class="section related-products recent-products product-carousel-section">
           <div class="section-title">
             <div><span class="eyebrow">Переглядали</span><h2>Нещодавно переглянуті товари</h2></div>
           </div>
-          <div class="product-grid compact-grid">${recent.map(renderProductCard).join("")}</div>
+          <div class="product-carousel recent-carousel">${recent.map(renderProductCard).join("")}</div>
         </section>
       ` : ""}
     </main>
@@ -567,22 +686,70 @@ function renderNotFound() {
 }
 
 function renderCategorySection() {
+  const desiredOrder = [
+    "paketi-majka",
+    "fasuvalni-paketi",
+    "paketi-bmw",
+    "paketi-z-logotipom",
+    "smittevi-paketi",
+    "odnorazovij-posud",
+    "gospodarski-tovari",
+    "polietilenovi-rukavichki",
+    "paketi-v-ruloni",
+  ];
+  const descriptions = {
+    "paketi-majka": "Для магазинів, ринків та супермаркетів.",
+    "fasuvalni-paketi": "Для продуктів та харчових товарів.",
+    "paketi-bmw": "Міцні пакети великої вантажопідйомності.",
+    "paketi-z-logotipom": "Фірмова упаковка для впізнаваного бренду.",
+    "smittevi-paketi": "Міцні пакети для дому, офісу та складу.",
+    "odnorazovij-posud": "Посуд для кафе, доставки та подій.",
+    "gospodarski-tovari": "Все для чистоти, кухні та щоденної роботи.",
+    "polietilenovi-rukavichki": "Гігієнічний захист для їжі та сервісу.",
+    "paketi-v-ruloni": "Зручні рулони для фасування і пакування.",
+  };
+  const displayNames = {
+    "paketi-majka": "Пакети Майка",
+    "smittevi-paketi": "Сміттєві пакети",
+    "polietilenovi-rukavichki": "Рукавички",
+    "paketi-v-ruloni": "Рулони",
+  };
+  const categories = [...state.categories].sort((a, b) => {
+    const aIndex = desiredOrder.indexOf(a.slug);
+    const bIndex = desiredOrder.indexOf(b.slug);
+    return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+  });
+  const categoryCount = (slug) => state.products.filter((product) => product.active && product.category_slug === slug).length;
+  const productWord = (count) => {
+    if (count % 10 === 1 && count % 100 !== 11) return "товар";
+    if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return "товари";
+    return "товарів";
+  };
   return `
     <section class="section categories" id="categories">
       <div class="section-title">
-        <div><span class="eyebrow">Каталог</span><h2>Популярні категорії упаковки</h2><p>Швидко оберіть потрібний напрям: пакети майка, фасування, рулони, посуд або господарські товари.</p></div>
+        <div><span class="eyebrow">Каталог</span><h2>Популярні категорії</h2><p>Швидко знайдіть потрібну упаковку для вашого бізнесу.</p></div>
       </div>
       <div class="category-grid">
-        ${state.categories.map((category) => `
+        ${categories.map((category) => {
+          const count = categoryCount(category.slug);
+          return `
           <a class="category-card" href="/category/${category.slug}" data-link>
-            <img src="${esc(category.image_url)}" alt="${esc(category.name)}" loading="lazy" />
+            <span class="category-card-media">
+              <img src="${esc(category.image_url)}" alt="${esc(displayNames[category.slug] || category.name)}" loading="lazy" />
+            </span>
             <span class="category-card-body">
-              <strong>${esc(category.name)}</strong>
-              <small>${esc(shortText(category.description || "Товари в наявності для опту та роздробу.", 72))}</small>
-              <em>Переглянути ${icon("arrow")}</em>
+              <strong>${esc(displayNames[category.slug] || category.name)}</strong>
+              <small>${esc(descriptions[category.slug] || "Товари в наявності для опту та роздробу.")}</small>
+              <span class="category-card-meta">${count} ${productWord(count)} в категорії</span>
+              <span class="category-card-button">Переглянути ${icon("arrow")}</span>
             </span>
           </a>
-        `).join("")}
+        `;
+        }).join("")}
+      </div>
+      <div class="category-catalog-action">
+        <a class="primary" href="#catalog" data-link>${icon("catalog")}Переглянути весь каталог</a>
       </div>
       <div class="category-seo">
         <h2>Упаковка для магазинів, кафе та виробництв</h2>
@@ -683,10 +850,10 @@ function renderProductShelf(title, description, items, eyebrowText) {
 function renderBenefitsSection() {
   return `
     <section class="benefits" aria-label="Переваги">
-      <article>${icon("shield")}<strong>Стабільна якість</strong><span>Пакування для щоденної роботи бізнесу без зайвої метушні.</span></article>
-      <article>${icon("percent")}<strong>Опт і роздріб</strong><span>Роздрібна та оптова ціна одразу в картці товару.</span></article>
-      <article>${icon("truck")}<strong>Доставка по Україні</strong><span>Менеджер швидко уточнює деталі після оформлення.</span></article>
-      <article>${icon("check")}<strong>120 товарів</strong><span>Каталог з категоріями, цінами, залишками та фото.</span></article>
+      <article>${icon("truck")}<strong>Швидка доставка</strong><span>Відправляємо замовлення по Україні після підтвердження.</span></article>
+      <article>${icon("box")}<strong>Власне виробництво</strong><span>Пакувальні матеріали напряму від виробника.</span></article>
+      <article>${icon("percent")}<strong>Оптові ціни</strong><span>Вигідні умови для магазинів, складів і виробництв.</span></article>
+      <article>${icon("check")}<strong>Якісний товар</strong><span>Фото, ціни, залишки та категорії зібрані в одному каталозі.</span></article>
     </section>
   `;
 }
@@ -738,18 +905,36 @@ function renderCatalogSection() {
 }
 
 function renderProductCard(product) {
+  const size = productAttribute(product.description, ["Розмір", "Размер"]) || product.sku || "Уточнюйте";
+  const pack = productAttribute(product.description, ["Кількість", "Количество", "Упаковка"]) || product.category_name || "Упаковка";
+  const inStock = Number(product.stock_quantity || 0) > 0;
+  const badges = productCardBadges(product);
   return `
     <article class="product-card">
       <a href="/product/${product.slug}" data-link class="quick-view">
         <img src="${esc(product.image_url)}" alt="${esc(product.name)}" loading="lazy" />
       </a>
       <div class="product-info">
-        <span class="badge">${icon("check")}${product.stock_quantity > 0 ? "В наявності" : "Немає"}</span>
+        <div class="product-card-top">
+          <span class="stock-badge ${inStock ? "in-stock" : "preorder"}">${inStock ? "В наявності" : "Під замовлення"}</span>
+          <span class="product-card-badges">${badges.map((badge) => `<span class="promo-badge ${badge.type}">${esc(badge.text)}</span>`).join("")}</span>
+        </div>
         <h3><a href="/product/${product.slug}" data-link>${esc(product.name)}</a></h3>
-        <p>${esc(product.description || "")}</p>
+        <dl class="product-specs">
+          <div><dt>Розмір</dt><dd>${esc(shortText(size, 34))}</dd></div>
+          <div><dt>В упаковці</dt><dd>${esc(shortText(pack, 34))}</dd></div>
+        </dl>
         <div class="product-bottom">
-          <div><strong>${money(product.retail_price)}</strong><span>Опт: ${money(product.wholesale_price)}</span></div>
-          <button class="add-btn" data-add="${product.id}" ${product.stock_quantity <= 0 ? "disabled" : ""}>${icon("cart")}До кошика</button>
+          <div class="product-price"><strong>${money(product.retail_price)}</strong><span>Опт: ${money(product.wholesale_price)}</span></div>
+          <div class="product-actions">
+            <button class="add-btn product-add" data-add="${product.id}" ${!inStock ? "disabled" : ""}>${icon("cart")}До кошика</button>
+            <a class="details-btn" href="/product/${product.slug}" data-link>Детальніше</a>
+          </div>
+          <div class="product-perks">
+            <span>🚚 Швидка доставка</span>
+            <span>🏭 Від виробника</span>
+            <span>🇺🇦 Доставка по Україні</span>
+          </div>
         </div>
       </div>
     </article>
@@ -805,37 +990,76 @@ function renderCart() {
   const lines = cartLines();
   const total = lines.reduce((sum, item) => sum + item.retail_price * item.quantity, 0);
   panel.innerHTML = `
-    <div class="cart-head"><div><span>Кошик</span><strong>${money(total)}</strong></div><button class="icon-btn" data-close-cart>${icon("close")}</button></div>
+    <div class="cart-head">
+      <div><span>Ваш кошик</span><strong>${lines.length ? `${count} товарів` : "Порожній"}</strong></div>
+      <button class="icon-btn cart-close" data-close-cart aria-label="Закрити кошик">${icon("close")}<span>Закрити</span></button>
+    </div>
     ${lines.length ? `
-      <div class="cart-list">
-        ${lines.map((item) => `
+      <div class="cart-body">
+        <div class="cart-list" aria-label="Товари в кошику">
+          ${lines.map((item) => `
           <div class="cart-item">
             <img src="${esc(item.image_url)}" alt="${esc(item.name)}" />
-            <div>
+            <div class="cart-item-info">
               <strong>${esc(item.name)}</strong>
-              <span>${money(item.retail_price)}</span>
+              <span class="cart-item-price">${money(item.retail_price)} / шт</span>
               <div class="qty">
-                <button data-qty="${item.id}" data-delta="-1">-</button>
-                <input data-qty-input="${item.id}" value="${item.quantity}" inputmode="numeric" />
-                <button data-qty="${item.id}" data-delta="1">+</button>
-                <button class="remove" data-remove="${item.id}">Видалити</button>
+                <button data-qty="${item.id}" data-delta="-1" aria-label="Зменшити кількість">−</button>
+                <input data-qty-input="${item.id}" value="${item.quantity}" inputmode="numeric" aria-label="Кількість товару" />
+                <button data-qty="${item.id}" data-delta="1" aria-label="Збільшити кількість">+</button>
               </div>
+              <button class="remove" data-remove="${item.id}">Видалити</button>
+            </div>
+            <div class="cart-line-total">
+              <span>Сума</span>
+              <strong>${money(item.retail_price * item.quantity)}</strong>
             </div>
           </div>
         `).join("")}
+        </div>
+        <section class="cart-summary" aria-label="Підсумок замовлення">
+          <div class="checkout-total">
+            <span>Разом</span>
+            <strong>${money(total)}</strong>
+          </div>
+          <div class="cart-summary-row"><span>Кількість товарів</span><strong>${count}</strong></div>
+          <div class="cart-trust">
+            <span>🚚 Доставка по Україні</span>
+            <span>💰 Опт та роздріб</span>
+            <span>🏭 Від виробника</span>
+            <span>📞 Підтвердимо замовлення телефоном</span>
+          </div>
+          <button class="primary checkout-anchor" type="button" data-show-checkout>${icon("check")}Оформити замовлення</button>
+          <button class="secondary light continue-shopping" type="button" data-close-cart>Продовжити покупки</button>
+        </section>
+        <form class="checkout" id="checkout-form" data-checkout novalidate>
+          <div class="checkout-title">
+            <span class="eyebrow">Оформлення</span>
+            <h2>Контактні дані</h2>
+            <p>Менеджер підтвердить замовлення телефоном.</p>
+          </div>
+          <div class="form-error" data-checkout-error hidden></div>
+          <label>Ім'я<input required name="name" placeholder="Ваше ім'я" /></label>
+          <label>Телефон<input required name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+38 (0__) ___-__-__" /></label>
+          <label>Місто<input required name="city" placeholder="Київ" /></label>
+          <label>Відділення Нової Пошти<input required name="nova_poshta_branch" placeholder="Відділення №..." /></label>
+          <label>Коментар<textarea name="comment" placeholder="Побажання до замовлення"></textarea></label>
+          <button type="submit">${icon("check")}Оформити замовлення</button>
+        </form>
       </div>
-      <form class="checkout" data-checkout novalidate>
-        <div class="checkout-total"><span>До сплати</span><strong>${money(total)}</strong></div>
-        <div class="form-error" data-checkout-error hidden></div>
-        <label>Ім'я<input required name="name" placeholder="Ваше ім'я" /></label>
-        <label>Телефон<input required name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+38 (0__) ___-__-__" /></label>
-        <label>Місто<input required name="city" placeholder="Київ" /></label>
-        <label>Відділення Нової Пошти<input required name="nova_poshta_branch" placeholder="Відділення №..." /></label>
-        <label>Коментар<textarea name="comment" placeholder="Побажання до замовлення"></textarea></label>
-        <button type="submit">${icon("check")}Оформити замовлення</button>
-      </form>
-    ` : `<div class="empty">Кошик порожній.</div>`}
+    ` : `
+      <div class="empty-cart">
+        <div class="empty-cart-icon">${icon("cart")}</div>
+        <strong>Ваш кошик порожній</strong>
+        <p>Додайте товари з каталогу, а ми швидко підтвердимо замовлення телефоном.</p>
+        <a class="primary" href="/#catalog" data-link data-close-cart>${icon("catalog")}Перейти в каталог</a>
+      </div>
+    `}
   `;
+  panel.querySelector("button[data-close-cart]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    document.querySelector("[data-cart-drawer]")?.classList.remove("open");
+  });
 }
 
 async function renderAdmin() {
@@ -1015,9 +1239,20 @@ function flash(message, duration = 1800) {
   setTimeout(() => node.classList.remove("show"), duration);
 }
 
+function updateProductTotal(summary) {
+  if (!summary) return;
+  const input = summary.querySelector("[data-product-qty]");
+  const total = summary.querySelector("[data-product-total]");
+  const price = Number(summary.dataset.price || 0);
+  const quantity = Math.max(1, Number(input?.value) || 1);
+  if (input) input.value = quantity;
+  if (total) total.textContent = money(price * quantity);
+}
+
 async function submitOrder(form) {
   const errorNode = form.querySelector("[data-checkout-error]");
   const errors = validateCheckout(form);
+  form.classList.toggle("was-validated", Boolean(errors.length));
   if (errors.length) {
     if (errorNode) {
       errorNode.hidden = false;
@@ -1038,7 +1273,7 @@ async function submitOrder(form) {
   document.querySelector("[data-cart-drawer]").classList.remove("open");
   await loadPublicData();
   renderRoute();
-  flash(`Дякуємо, замовлення прийнято. Номер замовлення #${order.id}`, 5200);
+  flash(`Дякуємо! Замовлення прийнято. Номер #${order.id}`, 5200);
 }
 
 async function renderRoute() {
@@ -1065,16 +1300,52 @@ document.addEventListener("click", async (event) => {
   const remove = event.target.closest("[data-remove]");
   const adminTab = event.target.closest("[data-admin-tab]");
   const menu = event.target.closest("[data-menu]");
+  const catalogToggle = event.target.closest("[data-catalog-toggle]");
   const logout = event.target.closest("[data-admin-logout]");
+  const productTab = event.target.closest("[data-product-tab]");
+  const productQtyStep = event.target.closest("[data-product-qty-step]");
+  const showCheckout = event.target.closest("[data-show-checkout]");
 
   if (link && link.getAttribute("href")?.startsWith("/")) {
     event.preventDefault();
+    document.querySelector("[data-nav]")?.classList.remove("open");
+    document.querySelector("[data-catalog-menu]")?.classList.remove("open");
     navigate(link.getAttribute("href"));
   }
-  if (add) addToCart(Number(add.dataset.add));
+  if (productTab) {
+    const section = productTab.closest(".product-tabs-section");
+    section?.querySelectorAll("[data-product-tab]").forEach((button) => button.classList.toggle("active", button === productTab));
+    section?.querySelectorAll("[data-product-pane]").forEach((pane) => pane.classList.toggle("active", pane.dataset.productPane === productTab.dataset.productTab));
+  }
+  if (productQtyStep) {
+    const summary = productQtyStep.closest("[data-product-summary]");
+    const input = summary?.querySelector("[data-product-qty]");
+    if (input) input.value = Math.max(1, (Number(input.value) || 1) + Number(productQtyStep.dataset.productQtyStep || 0));
+    updateProductTotal(summary);
+  }
+  if (add) {
+    const summary = add.closest("[data-product-summary]");
+    const quantity = summary ? Number(summary.querySelector("[data-product-qty]")?.value || 1) : 1;
+    addToCart(Number(add.dataset.add), quantity);
+  }
   if (openCart) document.querySelector("[data-cart-drawer]").classList.add("open");
   if (closeCart) document.querySelector("[data-cart-drawer]").classList.remove("open");
+  if (showCheckout) {
+    event.preventDefault();
+    document.querySelector("#checkout-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if (event.target.matches("[data-cart-drawer]")) document.querySelector("[data-cart-drawer]").classList.remove("open");
   if (menu) document.querySelector("[data-nav]")?.classList.toggle("open");
+  if (catalogToggle) {
+    const catalog = catalogToggle.closest("[data-catalog-menu]");
+    const open = !catalog.classList.contains("open");
+    catalog.classList.toggle("open", open);
+    catalogToggle.setAttribute("aria-expanded", String(open));
+  }
+  if (!event.target.closest(".topbar")) {
+    document.querySelector("[data-nav]")?.classList.remove("open");
+    document.querySelector("[data-catalog-menu]")?.classList.remove("open");
+  }
   if (logout) {
     await api.send("/api/admin/logout", "POST", {});
     state.adminAuthenticated = false;
@@ -1124,6 +1395,7 @@ document.addEventListener("input", (event) => {
     }
   }
   if (event.target.matches("[data-qty-input]")) updateCart(Number(event.target.dataset.qtyInput), event.target.value);
+  if (event.target.matches("[data-product-qty]")) updateProductTotal(event.target.closest("[data-product-summary]"));
 });
 
 document.addEventListener("change", async (event) => {
